@@ -17,13 +17,11 @@ admin.initializeApp({
 const db = admin.firestore();
 
 // TEST UCU: Sunucu çalışıyor mu?
-app.get('/', (req, res) => {
-  res.send('lookpriceme API Canlıda! 🚀');
-});
-
-// ÜRÜN GETİRME UCU: /api/v1/magaza-slug/urun-id
 app.get('/api/v1/:storeSlug/:markerId', async (req, res) => {
   const { storeSlug, markerId } = req.params;
+
+  // Render loglarında ne aradığımızı görelim
+  console.log(`Aranan Mağaza: [${storeSlug}], Aranan Ürün: [${markerId}]`);
 
   try {
     const productRef = db.collection('products');
@@ -34,15 +32,14 @@ app.get('/api/v1/:storeSlug/:markerId', async (req, res) => {
       .get();
 
     if (snapshot.empty) {
+      console.log("Sonuç: Ürün veritabanında bulunamadı."); // Bu logu görecek miyiz?
       return res.status(404).json({ error: "Ürün bulunamadı" });
     }
 
     const productData = snapshot.docs[0].data();
     res.json({ id: snapshot.docs[0].id, ...productData });
   } catch (error) {
+    console.error("Firebase Hatası:", error);
     res.status(500).json({ error: error.message });
   }
 });
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Sunucu ${PORT} portunda hazır!`));
