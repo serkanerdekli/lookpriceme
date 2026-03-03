@@ -1,6 +1,7 @@
 {
-  "name": "lookpriceme",
+  "name": "lookpriceme-backend",
   "version": "1.0.0",
+  "description": "AR Furniture SaaS Backend",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
