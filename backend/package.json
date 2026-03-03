@@ -1,0 +1,15 @@
+{
+  "name": "lookpriceme-backend",
+  "version": "1.0.0",
+  "description": "AR Furniture SaaS Backend",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "firebase-admin": "^11.5.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3"
+  }
+}
