@@ -76,6 +76,16 @@ app.get('/api/v1/:storeSlug/:markerId', async (req, res) => {
 
 // --- SUNUCU BAŞLATMA ---
 const PORT = process.env.PORT || 3000;
+// DEBUG: Veritabanındaki tüm ürünleri listeler (Hata bulmak için)
+app.get('/debug/list-all', async (req, res) => {
+  try {
+    const snapshot = await db.collection('products').get();
+    const allProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(allProducts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`--- lookpriceme SISTEMI HAZIR ---`);
   console.log(`Port: ${PORT}`);
