@@ -39,6 +39,23 @@
     </div>
 
     <script>
+        // Sayfa yüklendiğinde auth kontrolü yap
+    firebase.auth().onAuthStateChanged((user) => {
+    if (!user) {
+        // Kullanıcı giriş yapmamış, girişe gönder
+        window.location.href = "/login.html";
+    } else {
+        console.log("Giriş yapan kullanıcı:", user.email);
+        // Burada kullanıcının email'inden hangi mağaza olduğunu bulabiliriz
+        // Şimdilik test için serkan-mobilya üzerinden devam edeceğiz
+    }
+});
+
+function logout() {
+    firebase.auth().signOut().then(() => {
+        window.location.href = "/login.html";
+    });
+}
         // ÖNEMLİ: Sayfa yüklendiğinde çalışmasını sağlayan koruma
         document.addEventListener('DOMContentLoaded', () => {
             console.log("Panel Hazır, veriler çekiliyor...");
