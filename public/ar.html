@@ -2,26 +2,46 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lookpriceme - Akıllı Tarayıcı</title>
     <!-- AR Kütüphaneleri -->
     <script src="https://aframe.io/releases/1.4.1/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.1/dist/mindar-image-aframe.prod.js"></script>
     
     <style>
-        #ui-layer {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 999; display: none; width: 90%;
+        body { margin: 0; overflow: hidden; }
+        /* Bilgi Kartı Tasarımı */
+        #ui-container {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 85%; max-width: 350px; z-index: 1000; display: none;
         }
-        .info-card {
-            background: white; padding: 20px; border-radius: 15px; text-align: center;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        .card {
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
+            padding: 20px; border-radius: 20px; text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 2px solid #10b981;
+        }
+        .price { font-size: 2rem; font-weight: bold; color: #10b981; margin: 10px 0; }
+        .btn { background: #2563eb; color: white; border: none; padding: 12px; width: 100%; border-radius: 10px; font-weight: bold; }
+        
+        /* Tarama Göstergesi */
+        #scanner-overlay {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 250px; height: 250px; border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 20px; z-index: 500; pointer-events: none;
+        }
+        #scanner-overlay::after {
+            content: "Ürünü Çerçeveye Alın"; position: absolute; bottom: -30px; width: 100%;
+            text-align: center; color: white; font-family: sans-serif; font-size: 0.8rem;
         }
     </style>
 </head>
 <body>
 
-    <!-- AR Sahnesi: Sistem 'targets.mind' dosyasındaki mobilya resimlerini arayacak -->
+    <!-- Tarama Çerçevesi -->
+    <div id="scanner-overlay"></div>
+
+    <!-- AR Sahnesi -->
     <a-scene 
-        mindar-image="imageTargetSrc: ./targets.mind;" 
+        mindar-image="imageTargetSrc: ./targets.mind; filterMinCF:0.001; filterBeta: 0.01;" 
         color-space="sRGB" 
         renderer="colorManagement: true, physicallyCorrectLights" 
         vr-mode-ui="enabled: false" 
@@ -29,39 +49,56 @@
         
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-        <!-- 1. Mobilya (Efes Masası) Tanındığında Belirecek Görsel İşaret -->
-        <a-entity id="target-0" mindar-image-target="targetIndex: 0">
-            <!-- Masanın üzerinde yüzen mavi bir halka/buton -->
-            <a-ring color="#2563eb" radius-inner="0.08" radius-outer="0.1" position="0 0 0" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"></a-ring>
+        <!-- Yeşil Puf Hedefi (index: 0) -->
+        <a-entity id="furniture-target" mindar-image-target="targetIndex: 0">
+            <!-- Ürünün üzerinde yüzen sanal bir işaretçi -->
+            <a-ring color="#10b981" radius-inner="0.1" radius-outer="0.12" position="0 0 0" 
+                    animation="property: scale; to: 1.5 1.5 1.5; dir: alternate; dur: 1000; loop: true">
+            </a-ring>
         </a-entity>
-
     </a-scene>
 
-    <!-- Bilgi Paneli (Başlangıçta Gizli) -->
-    <div id="ui-layer">
-        <div class="info-card">
-            <h2 id="p-name">Mobilya Adı</h2>
-            <p id="p-price">0 TL</p>
-            <button onclick="location.reload()">Kapat</button>
+    <!-- Bilgi Kartı -->
+    <div id="ui-container">
+        <div class="card">
+            <h2 id="p-name" style="margin:0">Yükleniyor...</h2>
+            <div id="p-price" class="price">0 TL</div>
+            <p id="p-desc" style="font-size: 0.9rem; color: #666;"></p>
+            <button class="btn" onclick="alert('Teklif talebi iletildi!')">WhatsApp'tan Sor</button>
         </div>
     </div>
 
     <script>
-        // Sistem bir mobilyayı tanıdığında (targetFound)
-        const targetEl = document.querySelector('#target-0');
+        const targetEl = document.querySelector('#furniture-target');
+        const uiContainer = document.querySelector('#ui-container');
+
+        // URL'den mağaza ismini alalım (?s=serkan-mobilya)
+        const urlParams = new URLSearchParams(window.location.search);
+        const storeSlug = urlParams.get('s') || 'serkan-mobilya';
+
+        // Ürün Bulunduğunda
         targetEl.addEventListener("targetFound", event => {
-            console.log("Mobilya Tanındı!");
-            // API'den Efes Masası verilerini çek ve UI'yı göster
-            fetchProductData('serkan-mobilya', 'masa-001');
+            console.log("Ürün bulundu!");
+            fetchProductData(storeSlug, 'puf-001'); // Firestore'daki markerId ile eşleşmeli
+        });
+
+        // Ürün Kaybedildiğinde (Ekrandan çıkınca kartı gizle)
+        targetEl.addEventListener("targetLost", event => {
+            uiContainer.style.display = "none";
         });
 
         async function fetchProductData(store, marker) {
-            const res = await fetch(`/api/v1/${store}/${marker}`);
-            const data = await res.json();
-            if(data.success) {
-                document.getElementById('p-name').innerText = data.name;
-                document.getElementById('p-price').innerText = data.price + " TL";
-                document.getElementById('ui-layer').style.display = 'block';
+            try {
+                const res = await fetch(`/api/v1/${store}/${marker}`);
+                const data = await res.json();
+                if(data.success) {
+                    document.getElementById('p-name').innerText = data.name;
+                    document.getElementById('p-price').innerText = data.price + " TL";
+                    document.getElementById('p-desc').innerText = data.description || "";
+                    uiContainer.style.display = "block";
+                }
+            } catch (err) {
+                console.error("Veri çekme hatası:", err);
             }
         }
     </script>
