@@ -39,20 +39,22 @@
         };
         firebase.initializeApp(firebaseConfig);
 
-        document.getElementById('loginForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+       document.getElementById('loginForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
 
-            try {
-                const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
-                // Başarılı giriş
-                localStorage.setItem('userEmail', email); // Geçici olarak saklayalım
-                window.location.href = "/dashboard.html";
-            } catch (error) {
-                alert("Hata: " + error.message);
-            }
-        };
+    try {
+        // Giriş yap
+        await firebase.auth().signInWithEmailAndPassword(email, password);
+        console.log("Giriş başarılı, yönlendiriliyor...");
+        // Tarayıcıya küçük bir not bırakalım (Hızlandırmak için)
+        localStorage.setItem('isLoggedIn', 'true');
+        window.location.href = "/dashboard.html";
+    } catch (error) {
+        alert("Giriş hatası: " + error.message);
+    }
+};
     </script>
 </body>
 </html>
