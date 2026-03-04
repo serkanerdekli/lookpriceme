@@ -1,1 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>lookpriceme - AR View</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #ar-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center;
+            z-index: 1000; color: white; text-align: center;
+        }
+        .product-card {
+            background: white; color: #333; padding: 25px; border-radius: 20px;
+            width: 80%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            animation: slideUp 0.5s ease-out;
+        }
+        @keyframes slideUp { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .price { font-size: 2.5rem; font-weight: bold; color: #2ecc71; margin: 15px 0; }
+        .btn-buy { background: #3498db; color: white; border: none; padding: 12px 25px; border-radius: 50px; font-size: 1rem; cursor: pointer; }
+    </style>
+</head>
+<body>
 
+<div id="ar-overlay">
+    <div>
+        <div class="loader"></div>
+        <p>Ürün Bilgileri Yükleniyor...</p>
+    </div>
+</div>
+
+<script>
+    // URL'den mağaza ve ürün ID'sini alıyoruz: ar.html?s=serkan-mobilya&m=masa-001
+    const urlParams = new URLSearchParams(window.location.search);
+    const store = urlParams.get('s');
+    const marker = urlParams.get('m');
+
+    if (!store || !marker) {
+        document.getElementById('ar-overlay').innerHTML = "<h1>Hatalı Link! 👋</h1>";
+    } else {
+        // Kendi API'mize bağlanıyoruz
+        fetch(`/api/v1/${store}/${marker}`)
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    document.getElementById('ar-overlay').innerHTML = `
+                        <div class="product-card">
+                            <h2 style="margin-top:0">${data.name}</h2>
+                            <p style="color:#666">${data.description || 'Harika bir mobilya seçimi!'}</p>
+                            <div class="price">${data.price} TL</div>
+                            <button class="btn-buy" onclick="alert('Sepete Eklendi!')">Satın Al / Teklif Al</button>
+                            <p style="font-size:0.8rem; color:#999; margin-top:15px;">lookpriceme - ${data.storeSlug}</p>
+                        </div>
+                    `;
+                    document.getElementById('ar-overlay').style.background = "rgba(0,0,0,0.4)";
+                } else {
+                    document.getElementById('ar-overlay').innerHTML = "<h1>Ürün Bulunamadı! ❌</h1>";
+                }
+            })
+            .catch(err => {
+                document.getElementById('ar-overlay').innerHTML = "<h1>Sunucu Hatası! ⚠️</h1>";
+            });
+    }
+</script>
+
+</body>
+</html>
