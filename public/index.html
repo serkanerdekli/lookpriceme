@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>lookpriceme | Mobilya Mağazaları İçin AR Çözümleri</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; color: #333; }
+        nav { display: flex; justify-content: space-between; padding: 20px 10%; background: #f8f9fa; align-items: center; }
+        .hero { padding: 80px 10%; text-align: center; background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); color: white; }
+        .contact-section { padding: 50px 10%; background: #fff; }
+        form { display: flex; flex-direction: column; max-width: 400px; margin: 0 auto; gap: 15px; }
+        input, button { padding: 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 1rem; }
+        button { background: #10b981; color: white; font-weight: bold; cursor: pointer; border: none; }
+        .login-btn { text-decoration: none; color: #3b82f6; font-weight: bold; border: 1px solid #3b82f6; padding: 8px 20px; border-radius: 20px; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <h2 style="color: #10b981;">lookpriceme</h2>
+    <a href="/login.html" class="login-btn">Mağaza Girişi</a>
+</nav>
+
+<div class="hero">
+    <h1>Mobilya Showroomunuzu Geleceğe Taşıyın</h1>
+    <p>Müşterileriniz sadece telefonlarını doğrultarak ürün detaylarını görsün.</p>
+</div>
+
+<div class="contact-section">
+    <h2 style="text-align: center;">Sisteme Dahil Olun</h2>
+    <form id="contactForm">
+        <input type="text" id="name" placeholder="Adınız Soyadınız" required>
+        <input type="text" id="storeName" placeholder="Mağaza Adınız" required>
+        <input type="email" id="email" placeholder="E-posta Adresiniz" required>
+        <input type="tel" id="phone" placeholder="Telefon Numaranız" required>
+        <button type="submit">Bilgi Almak İstiyorum</button>
+    </form>
+</div>
+
+<script>
+    document.getElementById('contactForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const formData = {
+            name: document.getElementById('name').value,
+            storeName: document.getElementById('storeName').value,
+            email: document.getElementById('email').value,
+            phone: document.getElementById('phone').value
+        };
+
+        const res = await fetch('/api/contact', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(formData)
+        });
+        const data = await res.json();
+        alert(data.message);
+        e.target.reset();
+    };
+</script>
+
+</body>
+</html>
