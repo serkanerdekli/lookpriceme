@@ -2,78 +2,127 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>lookpriceme | Mağaza Paneli</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lookpriceme | Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <style>
+        #loader { position: fixed; inset: 0; background: white; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+    </style>
 </head>
 <body class="bg-gray-100 flex h-screen overflow-hidden">
+
+    <!-- Yükleme Ekranı (Döngü hatasını önler) -->
+    <div id="loader">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+            <p class="mt-4 text-gray-600">Oturum kontrol ediliyor...</p>
+        </div>
+    </div>
+
     <!-- Sidebar -->
     <div class="w-64 bg-emerald-700 text-white p-6 hidden md:block">
         <h1 class="text-2xl font-bold mb-10">lookpriceme</h1>
         <nav class="space-y-4">
             <a href="#" class="block font-semibold bg-emerald-800 p-3 rounded">Ürünlerim</a>
-            <button onclick="logout()" class="block font-semibold p-3 text-red-300 w-full text-left">Çıkış Yap</button>
+            <button onclick="logout()" class="block font-semibold p-3 text-red-300 w-full text-left mt-20">Çıkış Yap</button>
         </nav>
     </div>
 
-    <!-- Main Content -->
+    <!-- Ana İçerik -->
     <div class="flex-1 overflow-y-auto p-8">
         <header class="flex justify-between items-center mb-10">
             <div>
-                <h2 class="text-3xl font-bold text-gray-800" id="storeTitle">Yükleniyor...</h2>
-                <p class="text-gray-500" id="storeSlugText">...</p>
+                <h2 class="text-3xl font-bold text-gray-800" id="storeTitle">Mağaza Paneli</h2>
+                <p class="text-gray-500" id="storeSlugText">Yükleniyor...</p>
             </div>
             <button onclick="openAddProductModal()" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700">Yeni Ürün Ekle</button>
         </header>
 
         <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="productList">
-            <p class="text-gray-500 italic">Ürünleriniz yükleniyor...</p>
+            <!-- Ürünler -->
         </div>
     </div>
 
     <script>
-        // FIREBASE CONFIG (Kendi bilgilerinle doldur!)
+        // BURAYA KENDİ BİLGİLERİNİ YAPIŞTIR (Login ile aynı olmalı)
         const firebaseConfig = {
-            apiKey: "AIzaSyAYgj2XmyxNhE3aI5eKYqEPNRmykDOr0E0",
-            authDomain: "lookpriceme-6b258.firebaseapp.com",
-            projectId: "lookpriceme-6b258",
-            storageBucket: "lookpriceme-6b258.firebasestorage.app",
-            messagingSenderId: "691008977276",
-            appId: "1:691008977276:web:748cb9a559f0e0c6014cf9"
+            apiKey: "...",
+            authDomain: "...",
+            projectId: "...",
+            storageBucket: "...",
+            messagingSenderId: "...",
+            appId: "..."
         };
         firebase.initializeApp(firebaseConfig);
 
         let currentStoreSlug = "";
 
-// 1. AUTH KONTROLÜ (Daha Sabırlı Versiyon)
-firebase.auth().onAuthStateChanged(async (user) => {
-    if (user) {
-        console.log("Kullanıcı doğrulandı:", user.email);
-        await fetchStoreSlug(user.email);
-    } else {
-        console.log("Kullanıcı bulunamadı, login sayfasına gönderiliyor...");
-        // Eğer giriş yapılmamışsa login'e gönder
-        window.location.href = "/login.html";
-    }
-});
+        // --- GÜVENLİK VE VERİ ÇEKME AKIŞI ---
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (user) {
+                console.log("Kullanıcı Onaylandı:", user.email);
+                await fetchStoreData(user.email);
+                document.getElementById('loader').style.display = 'none'; // Giriş tamamsa loader'ı kapat
+            } else {
+                console.log("Kullanıcı Yok, Login'e Gönderiliyor...");
+                window.location.href = "/login.html";
+            }
+        });
 
-// 2. MAĞAZA BUL (Hata Kontrolü Eklenmiş)
-async function fetchStoreSlug(email) {
-    try {
-        const res = await fetch(`/api/v1/get-store-by-owner/${email}`);
-        if (res.status === 404) {
-            alert("Dikkat: Bu e-posta ile eşleşen bir mağaza Firestore'da bulunamadı! (ownerEmail alanını kontrol edin)");
-            return;
+        async function fetchStoreData(email) {
+            try {
+                const res = await fetch(`/api/v1/get-store-by-owner/${email}`);
+                const data = await res.json();
+                if (data.success) {
+                    currentStoreSlug = data.slug;
+                    document.getElementById('storeSlugText').innerText = currentStoreSlug;
+                    document.getElementById('storeTitle').innerText = currentStoreSlug.toUpperCase() + " Paneli";
+                    loadProducts();
+                } else {
+                    alert("Mağaza bilgisi bulunamadı!");
+                }
+            } catch (err) { console.error("Hata:", err); }
         }
-        const data = await res.json();
-        if (data.success) {
-            currentStoreSlug = data.slug;
-            document.getElementById('storeSlugText').innerText = currentStoreSlug;
-            document.getElementById('storeTitle').innerText = currentStoreSlug.toUpperCase() + " Paneli";
-            loadProducts();
+
+        async function loadProducts() {
+            if(!currentStoreSlug) return;
+            const res = await fetch(`/api/v1/${currentStoreSlug}/products/all`);
+            const data = await res.json();
+            if (data.success) {
+                const list = document.getElementById('productList');
+                if (data.products.length === 0) {
+                    list.innerHTML = "<p class='text-gray-400 italic'>Henüz ürün eklenmemiş.</p>";
+                    return;
+                }
+                list.innerHTML = data.products.map(p => `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                        <h3 class="text-xl font-bold text-gray-800">${p.name}</h3>
+                        <p class="text-emerald-600 font-bold text-lg my-2">${p.price} TL</p>
+                        <p class="text-gray-400 text-xs">Marker: ${p.markerId}</p>
+                    </div>
+                `).join('');
+            }
         }
-    } catch (err) { 
-        console.error("Mağaza çekme hatası:", err);
-    }
-}
+
+        async function openAddProductModal() {
+            const name = prompt("Ürün Adı:");
+            const price = prompt("Fiyat:");
+            const markerId = prompt("Marker ID (Görsel Adı):");
+            if(!name || !price || !markerId) return;
+
+            const res = await fetch('/api/v1/products/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ storeSlug: currentStoreSlug, name, price, markerId })
+            });
+            if((await res.json()).success) loadProducts();
+        }
+
+        function logout() {
+            firebase.auth().signOut().then(() => window.location.href = "/login.html");
+        }
+    </script>
+</body>
+</html>
