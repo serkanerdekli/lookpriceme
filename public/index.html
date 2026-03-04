@@ -2,61 +2,78 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>lookpriceme | Mobilya Mağazaları İçin AR Çözümleri</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; color: #333; }
-        nav { display: flex; justify-content: space-between; padding: 20px 10%; background: #f8f9fa; align-items: center; }
-        .hero { padding: 80px 10%; text-align: center; background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); color: white; }
-        .contact-section { padding: 50px 10%; background: #fff; }
-        form { display: flex; flex-direction: column; max-width: 400px; margin: 0 auto; gap: 15px; }
-        input, button { padding: 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 1rem; }
-        button { background: #10b981; color: white; font-weight: bold; cursor: pointer; border: none; }
-        .login-btn { text-decoration: none; color: #3b82f6; font-weight: bold; border: 1px solid #3b82f6; padding: 8px 20px; border-radius: 20px; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lookpriceme | Geleceğin Mobilya Deneyimi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
+<body class="bg-gray-50 font-sans">
 
-<nav>
-    <h2 style="color: #10b981;">lookpriceme</h2>
-    <a href="/login.html" class="login-btn">Mağaza Girişi</a>
-</nav>
+    <!-- Navbar -->
+    <nav class="flex justify-between items-center px-8 py-6 bg-white shadow-sm">
+        <h1 class="text-2xl font-bold text-emerald-600">lookprice<span class="text-blue-600">me</span></h1>
+        <a href="/login" class="px-6 py-2 border-2 border-blue-600 text-blue-600 font-bold rounded-full hover:bg-blue-50 transition">Mağaza Girişi</a>
+    </nav>
 
-<div class="hero">
-    <h1>Mobilya Showroomunuzu Geleceğe Taşıyın</h1>
-    <p>Müşterileriniz sadece telefonlarını doğrultarak ürün detaylarını görsün.</p>
-</div>
+    <!-- Hero Section -->
+    <header class="text-center py-20 bg-gradient-to-br from-emerald-500 to-blue-600 text-white px-4">
+        <h2 class="text-4xl md:text-6xl font-extrabold mb-6">Müşterileriniz Bakınca Görsün</h2>
+        <p class="text-xl mb-10 opacity-90">Mobilya mağazanıza akıllı AR teknolojisini saniyeler içinde entegre edin.</p>
+        <a href="#contact" class="bg-white text-emerald-600 px-10 py-4 rounded-full font-bold text-lg shadow-lg hover:scale-105 transition transform">Ücretsiz Demo İsteyin</a>
+    </header>
 
-<div class="contact-section">
-    <h2 style="text-align: center;">Sisteme Dahil Olun</h2>
-    <form id="contactForm">
-        <input type="text" id="name" placeholder="Adınız Soyadınız" required>
-        <input type="text" id="storeName" placeholder="Mağaza Adınız" required>
-        <input type="email" id="email" placeholder="E-posta Adresiniz" required>
-        <input type="tel" id="phone" placeholder="Telefon Numaranız" required>
-        <button type="submit">Bilgi Almak İstiyorum</button>
-    </form>
-</div>
+    <!-- Özellikler -->
+    <section class="py-20 px-8 grid md:grid-cols-3 gap-10 max-w-6xl mx-auto">
+        <div class="bg-white p-8 rounded-2xl shadow-md border-b-4 border-emerald-500">
+            <h3 class="text-xl font-bold mb-4">Uygulama Gerekmez</h3>
+            <p class="text-gray-600">Müşterileriniz App Store ile uğraşmaz, tarayıcıdan anında ürün detaylarına ulaşır.</p>
+        </div>
+        <div class="bg-white p-8 rounded-2xl shadow-md border-b-4 border-blue-500">
+            <h3 class="text-xl font-bold mb-4">Görüntü Tanıma</h3>
+            <p class="text-gray-600">Sadece ürüne bakarak fiyat, kumaş ve ölçü bilgilerini havada görüntüler.</p>
+        </div>
+        <div class="bg-white p-8 rounded-2xl shadow-md border-b-4 border-purple-500">
+            <h3 class="text-xl font-bold mb-4">SaaS Yönetim</h3>
+            <p class="text-gray-600">Tüm ürünlerinizi ve fiyatlarınızı tek bir panelden anlık olarak güncelleyin.</p>
+        </div>
+    </section>
 
-<script>
-    document.getElementById('contactForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const formData = {
-            name: document.getElementById('name').value,
-            storeName: document.getElementById('storeName').value,
-            email: document.getElementById('email').value,
-            phone: document.getElementById('phone').value
+    <!-- İletişim Formu -->
+    <section id="contact" class="py-20 bg-gray-100">
+        <div class="max-w-xl mx-auto bg-white p-10 rounded-3xl shadow-xl">
+            <h2 class="text-3xl font-bold text-center mb-8">Mağaza Kayıt Talebi</h2>
+            <form id="leadForm" class="space-y-4">
+                <input type="text" id="name" placeholder="Adınız Soyadınız" class="w-full p-4 border rounded-xl" required>
+                <input type="text" id="store" placeholder="Mağaza Adınız" class="w-full p-4 border rounded-xl" required>
+                <input type="email" id="email" placeholder="E-posta Adresiniz" class="w-full p-4 border rounded-xl" required>
+                <input type="tel" id="phone" placeholder="Telefon Numaranız" class="w-full p-4 border rounded-xl" required>
+                <button type="submit" class="w-full bg-emerald-600 text-white p-4 rounded-xl font-bold text-lg hover:bg-emerald-700 transition">Bilgi Almak İstiyorum</button>
+            </form>
+        </div>
+    </section>
+
+    <footer class="text-center py-10 text-gray-400">
+        © 2026 lookpriceme - Tüm Hakları Saklıdır.
+    </footer>
+
+    <script>
+        document.getElementById('leadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const payload = {
+                name: document.getElementById('name').value,
+                storeName: document.getElementById('store').value,
+                email: document.getElementById('email').value,
+                phone: document.getElementById('phone').value
+            };
+
+            const res = await fetch('/api/contact', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            alert(data.message);
+            e.target.reset();
         };
-
-        const res = await fetch('/api/contact', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(formData)
-        });
-        const data = await res.json();
-        alert(data.message);
-        e.target.reset();
-    };
-</script>
-
+    </script>
 </body>
 </html>
