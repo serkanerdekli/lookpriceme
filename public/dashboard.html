@@ -1,62 +1,127 @@
-<!-- ... (HTML ve CSS kısımları aynı kalsın, sadece script kısmını güncelliyoruz) ... -->
-<script>
-    const storeSlug = "serkan-mobilya"; // İleride Login'den gelecek
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lookpriceme | Mağaza Paneli</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex h-screen overflow-hidden">
 
-    // 1. Ürünleri Firestore'dan Çek
-    async function loadProducts() {
-        try {
-            const res = await fetch(`/api/v1/${storeSlug}/products/all`);
-            const data = await res.json();
-            
-            if (data.success) {
-                renderProducts(data.products);
-            }
-        } catch (err) {
-            console.error("Yükleme hatası:", err);
-        }
-    }
+    <!-- Sidebar (Sol Menü) -->
+    <div class="w-64 bg-emerald-700 text-white p-6 hidden md:block">
+        <h1 class="text-2xl font-bold mb-10 text-white">lookpriceme</h1>
+        <nav class="space-y-4">
+            <a href="#" class="block font-semibold bg-emerald-800 p-3 rounded">Ürünlerim</a>
+            <a href="#" class="block font-semibold p-3 hover:bg-emerald-600 rounded">İstatistikler</a>
+            <a href="#" class="block font-semibold p-3 hover:bg-emerald-600 rounded">Mağaza Ayarları</a>
+            <button onclick="logout()" class="block font-semibold p-3 text-red-300 w-full text-left mt-10">Çıkış Yap</button>
+        </nav>
+    </div>
 
-    function renderProducts(products) {
-        const list = document.getElementById('productList');
-        if (products.length === 0) {
-            list.innerHTML = "<p class='text-gray-400'>Henüz ürün eklenmemiş.</p>";
-            return;
-        }
-        list.innerHTML = products.map(p => `
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                <h3 class="text-xl font-bold text-gray-800">${p.name}</h3>
-                <p class="text-emerald-600 font-bold text-lg my-2">${p.price} TL</p>
-                <p class="text-gray-400 text-xs">Marker: ${p.markerId}</p>
-                <div class="mt-4 flex gap-2">
-                    <button class="text-sm bg-gray-100 px-3 py-1 rounded">Düzenle</button>
-                    <button class="text-sm text-red-500 bg-red-50 px-3 py-1 rounded">Sil</button>
-                </div>
+    <!-- Main Content (Ana Alan) -->
+    <div class="flex-1 overflow-y-auto p-8">
+        <header class="flex justify-between items-center mb-10">
+            <div>
+                <h2 class="text-3xl font-bold text-gray-800" id="storeTitle">Mağaza Paneli</h2>
+                <p class="text-gray-500" id="storeSlugText">serkan-mobilya</p>
             </div>
-        `).join('');
-    }
+            <button onclick="openAddProductModal()" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition">
+                + Yeni Ürün Ekle
+            </button>
+        </header>
 
-    // 2. Yeni Ürün Ekleme (Prompt ile hızlı test)
-    async function openAddProductModal() {
-        const name = prompt("Ürün Adı:");
-        const price = prompt("Fiyat (TL):");
-        const markerId = prompt("Marker ID (Örn: masa-002):");
-        const description = prompt("Açıklama:");
+        <!-- Ürün Kartları Listesi -->
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="productList">
+            <!-- Ürünler buraya JS ile dinamik gelecek -->
+            <p class="text-gray-500 italic">Ürünleriniz yükleniyor...</p>
+        </div>
+    </div>
 
-        if (!name || !price || !markerId) return;
-
-        const res = await fetch('/api/v1/products/add', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ storeSlug, name, price, markerId, description })
+    <script>
+        // ÖNEMLİ: Sayfa yüklendiğinde çalışmasını sağlayan koruma
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("Panel Hazır, veriler çekiliyor...");
+            loadProducts();
         });
-        
-        const data = await res.json();
-        if (data.success) {
-            alert("Ürün Eklendi!");
-            loadProducts(); // Listeyi yenile
-        }
-    }
 
-    // Sayfa açıldığında yükle
-    loadProducts();
-</script>
+        const storeSlug = "serkan-mobilya"; // İleride Login'den dinamik gelecek
+
+        // 1. Ürünleri Firestore'dan Çek
+        async function loadProducts() {
+            try {
+                const res = await fetch(`/api/v1/${storeSlug}/products/all`);
+                const data = await res.json();
+                
+                if (data.success) {
+                    renderProducts(data.products);
+                } else {
+                    console.error("API hatası:", data.error);
+                }
+            } catch (err) {
+                console.error("Sunucuya ulaşılamadı:", err);
+            }
+        }
+
+        // 2. Ürünleri Ekrana Bas
+        function renderProducts(products) {
+            const list = document.getElementById('productList');
+            
+            // Eğer liste kutusu bulunamazsa hata vermemesi için kontrol
+            if (!list) return;
+
+            if (!products || products.length === 0) {
+                list.innerHTML = `
+                    <div class="col-span-full bg-white p-10 rounded-2xl text-center border-2 border-dashed border-gray-200">
+                        <p class="text-gray-400">Henüz hiç ürün eklememişsiniz.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = products.map(p => `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition">
+                    <h3 class="text-xl font-bold text-gray-800">${p.name}</h3>
+                    <p class="text-emerald-600 font-bold text-lg my-2">${p.price} TL</p>
+                    <div class="flex items-center justify-between mt-4">
+                        <span class="text-gray-400 text-xs font-mono">ID: ${p.markerId}</span>
+                        <div class="flex gap-2">
+                            <button class="text-xs bg-gray-100 px-3 py-1 rounded-md hover:bg-gray-200">Düzenle</button>
+                            <button class="text-xs text-red-500 bg-red-50 px-3 py-1 rounded-md hover:bg-red-100">Sil</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 3. Yeni Ürün Ekleme (Hızlı Form)
+        async function openAddProductModal() {
+            const name = prompt("Ürün Adı (Örn: Chester Koltuk):");
+            if (!name) return;
+            const price = prompt("Fiyat (Sadece sayı yazın):");
+            if (!price) return;
+            const markerId = prompt("Ürün Kodu / Marker (Örn: koltuk-01):");
+            if (!markerId) return;
+            const description = prompt("Kısa Açıklama:");
+
+            const res = await fetch('/api/v1/products/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ storeSlug, name, price, markerId, description })
+            });
+            
+            const data = await res.json();
+            if (data.success) {
+                alert("Ürün Başarıyla Eklendi! 🎉");
+                loadProducts(); // Listeyi otomatik yenile
+            } else {
+                alert("Hata oluştu: " + data.error);
+            }
+        }
+
+        function logout() {
+            window.location.href = "/login";
+        }
+    </script>
+</body>
+</html>
