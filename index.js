@@ -38,7 +38,22 @@ app.post('/api/contact', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+// MAĞAZA BULMA: Email adresine göre mağaza slug'ını getirir
+app.get('/api/v1/get-store-by-owner/:email', async (req, res) => {
+    try {
+        const { email } = req.params;
+        const snapshot = await db.collection('stores')
+            .where('ownerEmail', '==', email)
+            .limit(1).get();
 
+        if (snapshot.empty) return res.status(404).json({ error: "Mağaza bulunamadı" });
+        
+        const storeData = snapshot.docs[0].data();
+        res.json({ success: true, slug: storeData.slug || storeData.name.toLowerCase().replace(/ /g, "-") });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // 2. Mağazanın Tüm Ürünlerini Listele (Dashboard İçin)
 app.get('/api/v1/:storeSlug/products/all', async (req, res) => {
     const { storeSlug } = req.params;
