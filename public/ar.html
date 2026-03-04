@@ -110,6 +110,15 @@
     // Başlat
     initCamera();
     fetchData();
+    // WhatsApp'a yönlendirme fonksiyonu
+    function sendToWhatsApp(productName, storeName) {
+    const phone = "905XXXXXXXXX"; // Burası ileride veritabanından dinamik gelecek
+    const message = encodeURIComponent(`Merhaba! lookpriceme üzerinden [${productName}] ürününü inceliyorum. Detaylı bilgi alabilir miyim? (Mağaza: ${storeName})`);
+    window.location.href = `https://wa.me/${phone}?text=${message}`;
+}
+
+    // ... fetchData fonksiyonunun içindeki buton kısmını da şöyle güncelle:
+    // <button class="btn-action" onclick="sendToWhatsApp('${data.name}', '${data.storeSlug}')">WhatsApp'tan Teklif Al</button>
 </script>
 
 </body>
