@@ -46,15 +46,37 @@
 
         let currentStoreSlug = "";
 
-        // 1. AUTH KONTROLÜ
-        firebase.auth().onAuthStateChanged(async (user) => {
-            if (user) {
-                console.log("Kullanıcı aktif:", user.email);
-                await fetchStoreSlug(user.email);
-            } else {
-                window.location.href = "/login.html";
-            }
-        });
+// 1. AUTH KONTROLÜ (Daha Sabırlı Versiyon)
+firebase.auth().onAuthStateChanged(async (user) => {
+    if (user) {
+        console.log("Kullanıcı doğrulandı:", user.email);
+        await fetchStoreSlug(user.email);
+    } else {
+        console.log("Kullanıcı bulunamadı, login sayfasına gönderiliyor...");
+        // Eğer giriş yapılmamışsa login'e gönder
+        window.location.href = "/login.html";
+    }
+});
+
+// 2. MAĞAZA BUL (Hata Kontrolü Eklenmiş)
+async function fetchStoreSlug(email) {
+    try {
+        const res = await fetch(`/api/v1/get-store-by-owner/${email}`);
+        if (res.status === 404) {
+            alert("Dikkat: Bu e-posta ile eşleşen bir mağaza Firestore'da bulunamadı! (ownerEmail alanını kontrol edin)");
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            currentStoreSlug = data.slug;
+            document.getElementById('storeSlugText').innerText = currentStoreSlug;
+            document.getElementById('storeTitle').innerText = currentStoreSlug.toUpperCase() + " Paneli";
+            loadProducts();
+        }
+    } catch (err) { 
+        console.error("Mağaza çekme hatası:", err);
+    }
+}
 
         // 2. MAĞAZA BUL
         async function fetchStoreSlug(email) {
