@@ -2,97 +2,125 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>lookpriceme | Mağaza Paneli</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
 </head>
 <body class="bg-gray-100 flex h-screen overflow-hidden">
-
-    <!-- Sidebar (Sol Menü) -->
+    <!-- Sidebar -->
     <div class="w-64 bg-emerald-700 text-white p-6 hidden md:block">
-        <h1 class="text-2xl font-bold mb-10 text-white">lookpriceme</h1>
+        <h1 class="text-2xl font-bold mb-10">lookpriceme</h1>
         <nav class="space-y-4">
             <a href="#" class="block font-semibold bg-emerald-800 p-3 rounded">Ürünlerim</a>
-            <a href="#" class="block font-semibold p-3 hover:bg-emerald-600 rounded">İstatistikler</a>
-            <a href="#" class="block font-semibold p-3 hover:bg-emerald-600 rounded">Mağaza Ayarları</a>
-            <button onclick="logout()" class="block font-semibold p-3 text-red-300 w-full text-left mt-10">Çıkış Yap</button>
+            <button onclick="logout()" class="block font-semibold p-3 text-red-300 w-full text-left">Çıkış Yap</button>
         </nav>
     </div>
 
-    <!-- Main Content (Ana Alan) -->
+    <!-- Main Content -->
     <div class="flex-1 overflow-y-auto p-8">
         <header class="flex justify-between items-center mb-10">
             <div>
-                <h2 class="text-3xl font-bold text-gray-800" id="storeTitle">Mağaza Paneli</h2>
-                <p class="text-gray-500" id="storeSlugText">serkan-mobilya</p>
+                <h2 class="text-3xl font-bold text-gray-800" id="storeTitle">Yükleniyor...</h2>
+                <p class="text-gray-500" id="storeSlugText">...</p>
             </div>
-            <button onclick="openAddProductModal()" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition">
-                + Yeni Ürün Ekle
-            </button>
+            <button onclick="openAddProductModal()" class="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700">Yeni Ürün Ekle</button>
         </header>
 
-        <!-- Ürün Kartları Listesi -->
         <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="productList">
-            <!-- Ürünler buraya JS ile dinamik gelecek -->
             <p class="text-gray-500 italic">Ürünleriniz yükleniyor...</p>
         </div>
     </div>
 
     <script>
+        // FIREBASE CONFIG (Kendi bilgilerinle doldur!)
+        const firebaseConfig = {
+            apiKey: "...",
+            authDomain: "...",
+            projectId: "...",
+            storageBucket: "...",
+            messagingSenderId: "...",
+            appId: "..."
+        };
+        firebase.initializeApp(firebaseConfig);
+
         let currentStoreSlug = "";
 
-// 1. Firebase Auth Kontrolü
-firebase.auth().onAuthStateChanged(async (user) => {
-    if (user) {
-        console.log("Giriş yapıldı:", user.email);
-        // Kullanıcının mağazasını bul
-        await fetchStoreSlug(user.email);
-    } else {
-        window.location.href = "/login.html";
-    }
-});
+        // 1. AUTH KONTROLÜ
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (user) {
+                console.log("Kullanıcı aktif:", user.email);
+                await fetchStoreSlug(user.email);
+            } else {
+                window.location.href = "/login.html";
+            }
+        });
 
-// 2. Email'den Mağaza Slug'ını Çek
-async function fetchStoreSlug(email) {
-    try {
-        const res = await fetch(`/api/v1/get-store-by-owner/${email}`);
-        const data = await res.json();
-        if (data.success) {
-            currentStoreSlug = data.slug;
-            document.getElementById('storeSlugText').innerText = currentStoreSlug;
-            document.getElementById('storeTitle').innerText = currentStoreSlug.toUpperCase() + " Paneli";
-            loadProducts(); // Ürünleri şimdi yükle
-        } else {
-            alert("Bu hesaba bağlı bir mağaza bulunamadı!");
+        // 2. MAĞAZA BUL
+        async function fetchStoreSlug(email) {
+            try {
+                const res = await fetch(`/api/v1/get-store-by-owner/${email}`);
+                const data = await res.json();
+                if (data.success) {
+                    currentStoreSlug = data.slug;
+                    document.getElementById('storeSlugText').innerText = currentStoreSlug;
+                    document.getElementById('storeTitle').innerText = currentStoreSlug.toUpperCase() + " Paneli";
+                    console.log("Mağaza Slug Belirlendi:", currentStoreSlug);
+                    loadProducts(); // Ürünleri çek
+                } else {
+                    alert("Bu hesaba bağlı bir mağaza bulunamadı!");
+                }
+            } catch (err) { console.error("Mağaza çekme hatası:", err); }
         }
-    } catch (err) { console.error("Mağaza çekme hatası:", err); }
-}
 
-// 3. Ürünleri Listele (Artık currentStoreSlug kullanıyor)
-async function loadProducts() {
-    if (!currentStoreSlug) return;
-    const res = await fetch(`/api/v1/${currentStoreSlug}/products/all`);
-    const data = await res.json();
-    if (data.success) { renderProducts(data.products); }
-}
+        // 3. ÜRÜNLERİ LİSTELE
+        async function loadProducts() {
+            if (!currentStoreSlug) return;
+            console.log(currentStoreSlug + " için ürünler getiriliyor...");
+            try {
+                const res = await fetch(`/api/v1/${currentStoreSlug}/products/all`);
+                const data = await res.json();
+                console.log("API Yanıtı:", data);
+                
+                if (data.success) {
+                    renderProducts(data.products);
+                }
+            } catch (err) { console.error("Ürün yükleme hatası:", err); }
+        }
 
-// 4. Ürün Ekleme (Artık currentStoreSlug kullanıyor)
-async function openAddProductModal() {
-    const name = prompt("Ürün Adı:");
-    const price = prompt("Fiyat:");
-    const markerId = prompt("Ürün Kodu:");
-    if (!name || !price || !markerId) return;
+        function renderProducts(products) {
+            const list = document.getElementById('productList');
+            if (!products || products.length === 0) {
+                list.innerHTML = "<p class='text-gray-400'>Henüz ürün eklenmemiş.</p>";
+                return;
+            }
+            list.innerHTML = products.map(p => `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                    <h3 class="text-xl font-bold text-gray-800">${p.name}</h3>
+                    <p class="text-emerald-600 font-bold text-lg my-2">${p.price} TL</p>
+                    <p class="text-gray-400 text-xs">Kod: ${p.markerId}</p>
+                </div>
+            `).join('');
+        }
 
-    const res = await fetch('/api/v1/products/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ 
-            storeSlug: currentStoreSlug, // DİNAMİK OLDU!
-            name, price, markerId 
-        })
-    });
-    if ((await res.json()).success) { loadProducts(); }
-}
+        async function openAddProductModal() {
+            const name = prompt("Ürün Adı:");
+            const price = prompt("Fiyat:");
+            const markerId = prompt("Ürün Kodu:");
+            if (!name || !price || !markerId) return;
+
+            const res = await fetch('/api/v1/products/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ storeSlug: currentStoreSlug, name, price, markerId })
+            });
+            const data = await res.json();
+            if (data.success) { alert("Eklendi!"); loadProducts(); }
+        }
+
+        function logout() {
+            firebase.auth().signOut().then(() => window.location.href = "/login.html");
+        }
     </script>
 </body>
 </html>
