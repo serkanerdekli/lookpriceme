@@ -4,12 +4,55 @@
     <meta charset="UTF-8">
     <title>lookpriceme | Mağaza Girişi</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK (V9 Compatibility) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
 </head>
-<body class="bg-blue-600 h-screen flex items-center justify-center">
-    <div class="bg-white p-10 rounded-3xl shadow-2xl text-center max-w-sm">
-        <h1 class="text-3xl font-bold text-blue-600 mb-4">Çok Yakında!</h1>
-        <p class="text-gray-600 mb-8">Mağaza yönetim panelimiz şu an hazırlık aşamasında. Çok yakında ürünlerinizi buradan yönetebileceksiniz.</p>
-        <a href="/" class="text-blue-500 font-bold hover:underline">← Ana Sayfaya Dön</a>
+<body class="bg-gradient-to-br from-emerald-600 to-blue-700 h-screen flex items-center justify-center p-6">
+    <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md">
+        <h1 class="text-3xl font-bold text-center text-emerald-600 mb-2">lookpriceme</h1>
+        <p class="text-gray-500 text-center mb-8">Yönetim Paneline Giriş Yapın</p>
+        
+        <form id="loginForm" class="space-y-4">
+            <div>
+                <label class="block text-sm font-bold mb-1">E-posta</label>
+                <input type="email" id="email" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="admin@magaza.com" required>
+            </div>
+            <div>
+                <label class="block text-sm font-bold mb-1">Şifre</label>
+                <input type="password" id="password" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-lg">Giriş Yap</button>
+        </form>
+        <p class="text-center mt-6 text-sm text-gray-400">Henüz hesabınız yok mu? <a href="/#contact" class="text-blue-500 font-bold">Bize Ulaşın</a></p>
     </div>
+
+    <script>
+        // FIREBASE AYARLARIN (Firebase Console > Project Settings > General kısmından almalısın)
+        const firebaseConfig = {
+            apiKey: "SENIN_API_KEY",
+            authDomain: "lookpriceme.firebaseapp.com",
+            projectId: "lookpriceme",
+            storageBucket: "lookpriceme.appspot.com",
+            messagingSenderId: "...",
+            appId: "..."
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        document.getElementById('loginForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+                // Başarılı giriş
+                localStorage.setItem('userEmail', email); // Geçici olarak saklayalım
+                window.location.href = "/dashboard.html";
+            } catch (error) {
+                alert("Hata: " + error.message);
+            }
+        };
+    </script>
 </body>
 </html>
