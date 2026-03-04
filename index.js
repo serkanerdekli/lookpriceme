@@ -5,117 +5,67 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
-
-// --- ARA YAZILIMLAR (MIDDLEWARE) ---
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// --- FIREBASE BAĞLANTISI ---
-try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-    });
-    console.log("Firebase Admin SDK Başarıyla Bağlandı.");
-} catch (error) {
-    console.error("Firebase Bağlantı Hatası:", error.message);
-}
-
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
 // --- API ROTLARI ---
 
-// 1. İletişim Formu (Lead Generation)
+// 1. İletişim Formu
 app.post('/api/contact', async (req, res) => {
     try {
-        const { name, storeName, phone, email } = req.body;
-        await db.collection('leads').add({
-            name, storeName, phone, email, status: "Yeni", date: new Date()
-        });
-        res.json({ success: true, message: "Talebiniz başarıyla alındı!" });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+        await db.collection('leads').add({ ...req.body, date: new Date() });
+        res.json({ success: true, message: "Talebiniz alındı!" });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
-// MAĞAZA BULMA: Email adresine göre mağaza slug'ını getirir
+
+// 2. Email'den Mağaza Slug'ını Bul (Kritik!)
 app.get('/api/v1/get-store-by-owner/:email', async (req, res) => {
     try {
-        const { email } = req.params;
-        const snapshot = await db.collection('stores')
-            .where('ownerEmail', '==', email)
-            .limit(1).get();
-
+        const snapshot = await db.collection('stores').where('ownerEmail', '==', req.params.email).limit(1).get();
         if (snapshot.empty) return res.status(404).json({ error: "Mağaza bulunamadı" });
-        
-        const storeData = snapshot.docs[0].data();
-        res.json({ success: true, slug: storeData.slug || storeData.name.toLowerCase().replace(/ /g, "-") });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+        res.json({ success: true, slug: snapshot.docs[0].data().slug });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
-// 2. Mağazanın Tüm Ürünlerini Listele (Dashboard İçin)
+
+// 3. Mağazanın Ürünlerini Listele
 app.get('/api/v1/:storeSlug/products/all', async (req, res) => {
-    const { storeSlug } = req.params;
     try {
-        const snapshot = await db.collection('products')
-            .where('storeSlug', '==', storeSlug)
-            .get();
+        const snapshot = await db.collection('products').where('storeSlug', '==', req.params.storeSlug).get();
         const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         res.json({ success: true, products });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// 3. Yeni Ürün Ekle (Dashboard'dan)
+// 4. Yeni Ürün Ekle
 app.post('/api/v1/products/add', async (req, res) => {
     try {
         const { storeSlug, name, price, markerId, description } = req.body;
-        const newDoc = await db.collection('products').add({
-            storeSlug,
-            name,
-            price: Number(price),
-            markerId,
-            description,
-            createdAt: new Date()
-        });
-        res.json({ success: true, id: newDoc.id });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+        await db.collection('products').add({ storeSlug, name, price: Number(price), markerId, description, createdAt: new Date() });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// 4. Tekli Ürün Getir (AR Ekranı İçin)
+// 5. AR İçin Tekli Ürün Getir
 app.get('/api/v1/:storeSlug/:markerId', async (req, res) => {
-    const { storeSlug, markerId } = req.params;
     try {
-        const snapshot = await db.collection('products')
-            .where('storeSlug', '==', storeSlug)
-            .where('markerId', '==', markerId)
-            .limit(1).get();
-        if (snapshot.empty) return res.status(404).json({ error: "Ürün bulunamadı" });
+        const snapshot = await db.collection('products').where('storeSlug', '==', req.params.storeSlug).where('markerId', '==', req.params.markerId).limit(1).get();
+        if (snapshot.empty) return res.status(404).json({ error: "Bulunamadı" });
         res.json({ success: true, ...snapshot.docs[0].data() });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- DİNAMİK YÖNLENDİRME (EN ALTA OLMALI) ---
+// --- DİNAMİK YÖNLENDİRME ---
 app.get('/:storeSlug', (req, res) => {
     const slug = req.params.storeSlug;
-    const reserved = ['login', 'dashboard', 'admin', 'api', 'index.html', 'ar.html', 'assets'];
-    
-    // Eğer bir dosya adı veya özel kelime değilse mağaza AR sayfasına yönlendir
-    if (reserved.includes(slug) || slug.includes('.')) {
-        return res.sendFile(path.join(__dirname, 'public', slug + (slug.includes('.') ? '' : '.html')));
-    }
-    
+    const reserved = ['login', 'dashboard', 'admin', 'api', 'index.html', 'ar.html'];
+    if (reserved.includes(slug) || slug.includes('.')) return res.sendFile(path.join(__dirname, 'public', slug + (slug.includes('.') ? '' : '.html')));
     res.sendFile(path.join(__dirname, 'public', 'ar.html'));
 });
 
-// --- SUNUCU BAŞLATMA ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`lookpriceme Sunucusu ${PORT} portunda fırtına gibi esiyor!`);
-});
+app.listen(PORT, () => console.log(`Sistem ${PORT} portunda hazır!`));
