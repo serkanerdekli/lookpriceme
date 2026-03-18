@@ -1,4 +1,5 @@
 import express from "express";
+import "express-async-errors";
 import pkg from 'pg';
 const { Pool } = pkg;
 import path from "path";
@@ -1651,6 +1652,12 @@ async function startServer() {
       console.error("Dist directory not found! Did you run 'npm run build'?");
     }
   }
+
+  // GLOBAL ERROR HANDLER
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("Backend Crash Prevented:", err);
+    res.status(500).json({ error: err.message || "Sunucuda beklenmeyen bir sorun oluştu." });
+  });
 
   console.log(`Attempting to listen on 0.0.0.0:${PORT}...`);
   app.listen(PORT, "0.0.0.0", () => {

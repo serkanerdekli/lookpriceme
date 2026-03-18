@@ -22,6 +22,7 @@
     "codepage": "^1.15.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "express-async-errors": "^3.1.1",
     "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.0",
