@@ -609,35 +609,40 @@ async function startServer() {
 
   // Auth: Login
   app.post("/api/auth/login", async (req, res) => {
-    const { email, password } = req.body;
-    const userRes = await pool.query(`
-      SELECT u.*, s.slug as store_slug 
-      FROM users u 
-      LEFT JOIN stores s ON u.store_id = s.id 
-      WHERE u.email = $1
-    `, [email]);
-    
-    const user = userRes.rows[0];
-    if (!user || !bcrypt.compareSync(password, user.password)) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-    
-    const token = jwt.sign({ 
-      id: user.id, 
-      role: user.role, 
-      store_id: user.store_id,
-      store_slug: user.store_slug 
-    }, JWT_SECRET);
-    
-    res.json({ 
-      token, 
-      user: { 
-        email: user.email, 
+    try {
+      const { email, password } = req.body;
+      const userRes = await pool.query(`
+        SELECT u.*, s.slug as store_slug 
+        FROM users u 
+        LEFT JOIN stores s ON u.store_id = s.id 
+        WHERE u.email = $1
+      `, [email]);
+      
+      const user = userRes.rows[0];
+      if (!user || !bcrypt.compareSync(password, user.password)) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      const token = jwt.sign({ 
+        id: user.id, 
         role: user.role, 
         store_id: user.store_id,
         store_slug: user.store_slug 
-      } 
-    });
+      }, JWT_SECRET);
+      
+      res.json({ 
+        token, 
+        user: { 
+          email: user.email, 
+          role: user.role, 
+          store_id: user.store_id,
+          store_slug: user.store_slug 
+        } 
+      });
+    } catch (e: any) {
+      console.error("Login error:", e);
+      res.status(500).json({ error: "Database connection failed! Check DATABASE_URL in Render." });
+    }
   });
 
   app.post("/api/auth/change-password", authenticate, async (req: any, res) => {
