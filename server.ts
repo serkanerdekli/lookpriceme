@@ -1615,7 +1615,8 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // Vite middleware for development
+  const distPath = path.join(__dirname, "dist");
+  
   if (process.env.NODE_ENV !== "production") {
     console.log("Loading Vite middleware for development...");
     try {
@@ -1627,11 +1628,14 @@ async function startServer() {
       app.use(vite.middlewares);
       console.log("Vite middleware loaded.");
     } catch (e) {
-      console.error("Failed to load Vite middleware:", e);
+      console.error("Failed to load Vite middleware, falling back to static dist:", e);
+      if (fs.existsSync(distPath)) {
+        app.use(express.static(distPath));
+        app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
+      }
     }
   } else {
     console.log("Serving static files from dist...");
-    const distPath = path.join(__dirname, "dist");
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get("*", (req, res) => {
