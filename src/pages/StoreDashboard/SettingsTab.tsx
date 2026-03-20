@@ -11,7 +11,8 @@ import {
   Smartphone,
   MapPin,
   CreditCard,
-  Languages
+  Languages,
+  AlertTriangle
 } from "lucide-react";
 import { translations } from "../../translations";
 import { useLanguage } from "../../contexts/LanguageContext";
@@ -68,32 +69,45 @@ const SettingsTab = ({
     }
   ];
 
+  const isExpired = branding.plan !== 'free' && branding.plan !== 'basic' && branding.subscription_end && new Date(branding.subscription_end) < new Date();
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
       {/* Subscription Section */}
-      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative">
+      <div className={`bg-white p-8 rounded-3xl border shadow-sm overflow-hidden relative ${isExpired ? 'border-red-200 bg-red-50/10' : 'border-gray-100'}`}>
         <div className="absolute top-0 right-0 p-6">
           <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+            isExpired ? 'bg-red-100 text-red-600' :
             branding.plan === 'pro' ? 'bg-indigo-100 text-indigo-600' : 
             branding.plan === 'enterprise' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-400'
           }`}>
             {lang === 'tr' ? 'Mevcut Plan:' : 'Current Plan:'} {branding.plan?.toUpperCase() || 'FREE'}
+            {isExpired && ` (${lang === 'tr' ? 'SÜRESİ DOLDU' : 'EXPIRED'})`}
           </div>
         </div>
 
         <div className="flex items-center space-x-3 mb-8">
-          <div className="p-2 bg-amber-50 rounded-xl text-amber-600">
+          <div className={`p-2 rounded-xl ${isExpired ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
             <CreditCard className="h-5 w-5" />
           </div>
           <div>
             <h3 className="text-xl font-bold text-gray-900">{lang === 'tr' ? 'Abonelik ve Paketler' : 'Subscription & Plans'}</h3>
             {branding.subscription_end && (
-              <p className="text-xs text-gray-400 font-medium mt-1">
-                {lang === 'tr' ? 'Yenileme Tarihi:' : 'Renewal Date:'} {new Date(branding.subscription_end).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US')}
+              <p className={`text-xs font-medium mt-1 ${isExpired ? 'text-red-500' : 'text-gray-400'}`}>
+                {isExpired ? (lang === 'tr' ? 'Aboneliğiniz sona erdi' : 'Your subscription has expired') : (lang === 'tr' ? 'Yenileme Tarihi:' : 'Renewal Date:')} {new Date(branding.subscription_end).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US')}
               </p>
             )}
           </div>
         </div>
+
+        {isExpired && (
+          <div className="mb-8 p-4 bg-red-100 border border-red-200 rounded-2xl text-red-700 text-sm font-bold flex items-center">
+            <AlertTriangle className="h-5 w-5 mr-3 shrink-0" />
+            {lang === 'tr' 
+              ? 'Aboneliğinizin süresi dolduğu için ürün limitiniz 50\'ye düşürülmüştür. Lütfen hizmete devam etmek için paketlerden birini seçiniz.' 
+              : 'Your subscription has expired, and your product limit has been reduced to 50. Please select a plan to continue service.'}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {plans.map((plan) => (
@@ -113,12 +127,12 @@ const SettingsTab = ({
                   </li>
                 ))}
               </ul>
-              {branding.plan !== plan.id && plan.id !== 'basic' && (
+              {((branding.plan !== plan.id && plan.id !== 'basic') || (branding.plan === plan.id && isExpired)) && (
                 <button 
                   onClick={() => onUpgradePlan(plan.id)}
                   className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition-all shadow-lg shadow-gray-100"
                 >
-                  {lang === 'tr' ? 'Yükselt' : 'Upgrade'}
+                  {isExpired && branding.plan === plan.id ? (lang === 'tr' ? 'Yenile' : 'Renew') : (lang === 'tr' ? 'Yükselt' : 'Upgrade')}
                 </button>
               )}
               {branding.plan === plan.id && (

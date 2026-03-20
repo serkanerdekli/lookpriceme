@@ -85,7 +85,7 @@ const AnalyticsTab = ({ analytics, branding }: AnalyticsTabProps) => {
           <h3 className="text-xl font-bold text-gray-900 mb-8">{t.salesTrend}</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={analytics.daily_sales}>
+              <AreaChart data={analytics.daily_sales || []}>
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
@@ -125,7 +125,7 @@ const AnalyticsTab = ({ analytics, branding }: AnalyticsTabProps) => {
           <h3 className="text-xl font-bold text-gray-900 mb-8">{t.scanTrend}</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={analytics.daily_scans}>
+              <LineChart data={analytics.daily_scans || []}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                 <XAxis 
                   dataKey="date" 

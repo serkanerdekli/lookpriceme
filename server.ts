@@ -442,14 +442,21 @@ async function startServer() {
   // --- HELPER FUNCTIONS ---
   const PLAN_LIMITS: Record<string, number> = {
     'free': 50,
-    'basic': 100,
+    'basic': 50,
     'pro': 500,
     'enterprise': 1000000
   };
 
   async function checkProductLimit(storeId: number, additionalCount: number = 1) {
-    const storeRes = await pool.query("SELECT plan FROM stores WHERE id = $1", [storeId]);
-    const plan = storeRes.rows[0]?.plan || 'free';
+    const storeRes = await pool.query("SELECT plan, subscription_end FROM stores WHERE id = $1", [storeId]);
+    const store = storeRes.rows[0];
+    let plan = store?.plan || 'free';
+    
+    // If subscription expired, revert to free limit
+    if (plan !== 'free' && plan !== 'basic' && store.subscription_end && new Date(store.subscription_end) < new Date()) {
+        plan = 'free';
+    }
+
     const limit = PLAN_LIMITS[plan] || 50;
     
     const currentCountRes = await pool.query("SELECT COUNT(*)::INT as count FROM products WHERE store_id = $1", [storeId]);
@@ -1607,7 +1614,8 @@ async function startServer() {
 
   app.post("/api/store/sales/:id/complete", authenticate, async (req: any, res) => {
     const { id } = req.params;
-    const { paymentMethod, payments } = req.body; // payments: [{method: 'cash', amount: 60}, {method: 'card', amount: 40}]
+    const { paymentMethod, payments, companyId } = req.body; 
+    const storeId = req.user.store_id;
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -1624,14 +1632,18 @@ async function startServer() {
         }
       }
 
-      // 2. Update sale status and payment method (for backward compatibility, store primary or 'multiple')
+      // 2. Update sale status and payment method
       const primaryMethod = payments && payments.length > 0 ? (payments.length > 1 ? 'multiple' : payments[0].method) : (paymentMethod || 'cash');
       await client.query(
-        "UPDATE sales SET status = 'completed', payment_method = $1 WHERE id = $2",
-        [primaryMethod, id]
+        "UPDATE sales SET status = 'completed', payment_method = $1 WHERE id = $2 AND store_id = $3",
+        [primaryMethod, id, storeId]
       );
 
-      // 3. Save detailed payments if provided
+      // 3. Save detailed payments
+      const saleRes = await client.query("SELECT total_amount, currency FROM sales WHERE id = $1", [id]);
+      const total = saleRes.rows[0].total_amount;
+      const currency = saleRes.rows[0].currency;
+
       if (payments && payments.length > 0) {
         for (const p of payments) {
           await client.query(
@@ -1640,12 +1652,17 @@ async function startServer() {
           );
         }
       } else {
-        // Fallback for single payment
-        const saleRes = await client.query("SELECT total_amount FROM sales WHERE id = $1", [id]);
-        const total = saleRes.rows[0].total_amount;
         await client.query(
           "INSERT INTO sale_payments (sale_id, payment_method, amount) VALUES ($1, $2, $3)",
           [id, paymentMethod || 'cash', total]
+        );
+      }
+
+      // 4. Handle Cari (Current Account) Transaction
+      if (paymentMethod === 'cari' && companyId) {
+        await client.query(
+          "INSERT INTO current_account_transactions (store_id, company_id, type, amount, description) VALUES ($1, $2, 'debt', $3, $4)",
+          [storeId, companyId, total, `Mobil Satış #${id} (Tahsilat Bekleniyor)`]
         );
       }
 

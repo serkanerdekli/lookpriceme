@@ -87,4 +87,8 @@ export const api = {
   
   // Payment
   initializePayment: (planName: string) => api.post("/api/payment/checkout-form/initialize", { planName }),
+
+  // Sales Management
+  completeSale: (id: number, data: any) => api.post(`/api/store/sales/${id}/complete`, data),
+  cancelSale: (id: number) => api.post(`/api/store/sales/${id}/cancel`, {}),
 };

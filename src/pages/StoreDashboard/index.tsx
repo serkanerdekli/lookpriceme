@@ -310,6 +310,36 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
     }
   };
 
+  const handleCompleteSale = async (saleId: number, paymentMethod: string, companyId?: number) => {
+    try {
+      setLoading(true);
+      await api.completeSale(saleId, { paymentMethod, companyId });
+      setSelectedSale(null);
+      fetchSales();
+      fetchData(); // Refresh companies balance
+      alert(lang === 'tr' ? "Satış başarıyla tamamlandı." : "Sale completed successfully.");
+    } catch (error: any) {
+      alert(error.message || "Satış tamamlanırken hata oluştu.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelSale = async (saleId: number) => {
+    if (window.confirm(lang === 'tr' ? "Bu satışı iptal etmek istediğinize emin misiniz?" : "Are you sure you want to cancel this sale?")) {
+      try {
+        setLoading(true);
+        await api.cancelSale(saleId);
+        setSelectedSale(null);
+        fetchSales();
+      } catch (error: any) {
+        alert(error.message || "Satış iptal edilirken hata oluştu.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const navItems = [
     { id: "products", label: t.products, icon: Package },
     { id: "analytics", label: t.analytics, icon: LayoutDashboard },
@@ -369,7 +399,7 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
           <div className="mt-auto p-8 border-t border-gray-50">
             <div className="flex items-center space-x-4 mb-6 p-3 bg-gray-50 rounded-2xl">
               <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 font-bold border border-gray-100">
-                {user.username[0].toUpperCase()}
+                {user.username ? user.username[0].toUpperCase() : '?'}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-900 truncate">{user.username}</p>
@@ -419,6 +449,42 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
                 <AlertTriangle className="mr-2 h-5 w-5" />
                 {errorMsg}
               </div>
+            )}
+
+            {branding.plan !== 'free' && branding.plan !== 'basic' && branding.subscription_end && (
+              (() => {
+                const daysLeft = Math.ceil((new Date(branding.subscription_end).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                if (daysLeft <= 7) {
+                  return (
+                    <div className={`mb-6 p-4 rounded-2xl border flex items-center shadow-sm ${daysLeft < 0 ? 'bg-red-50 border-red-100 text-red-700' : 'bg-amber-50 border-amber-100 text-amber-700'}`}>
+                      <div className={`p-2 rounded-xl mr-4 ${daysLeft < 0 ? 'bg-red-100' : 'bg-amber-100'}`}>
+                        <AlertTriangle className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-black">
+                          {daysLeft < 0 
+                            ? (lang === 'tr' ? 'ABONELİK SÜRESİ DOLDU' : 'SUBSCRIPTION EXPIRED')
+                            : (lang === 'tr' ? `ABONELİK YENİLEME YAKLAŞIYOR (${daysLeft} GÜN KALDI)` : `SUBSCRIPTION RENEWAL SOON (${daysLeft} DAYS LEFT)`)
+                          }
+                        </p>
+                        <p className="text-xs font-bold opacity-80">
+                          {daysLeft < 0 
+                            ? (lang === 'tr' ? 'Hizmete kesintisiz devam etmek için lütfen paketinizi yenileyin.' : 'Please renew your plan to continue service without interruption.')
+                            : (lang === 'tr' ? 'Paketinizi ayarlardan yenileyebilirsiniz.' : 'You can renew your plan from settings.')
+                          }
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => setActiveTab('settings')}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${daysLeft < 0 ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
+                      >
+                        {lang === 'tr' ? 'YENİLE' : 'RENEW'}
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()
             )}
             
             {activeTab === "products" && (
@@ -494,6 +560,399 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
           </div>
         </div>
       </main>
+
+      {/* Sale Details Modal */}
+      <AnimatePresence>
+        {selectedSale && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                <div>
+                  <h3 className="text-2xl font-black text-gray-900 flex items-center">
+                    <span className="text-indigo-600 mr-2">#</span>{selectedSale.id} {lang === 'tr' ? 'Satış Detayı' : 'Sale Details'}
+                  </h3>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
+                    {new Date(selectedSale.created_at).toLocaleString('tr-TR')}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setSelectedSale(null)}
+                  className="p-3 bg-white hover:bg-gray-100 rounded-2xl transition-all shadow-sm border border-gray-100"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                {/* Items */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
+                    <Package className="h-4 w-4 mr-2" /> {lang === 'tr' ? 'Ürünler' : 'Products'}
+                  </h4>
+                  <div className="space-y-3">
+                    {selectedSale.items?.map((item: any) => (
+                      <div key={item.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div className="flex items-center space-x-4">
+                          <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 font-bold shadow-sm border border-gray-100">
+                            {item.quantity}x
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900">{item.product_name}</p>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase">{item.barcode}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-black text-gray-900">
+                            {Number(item.total_price).toLocaleString('tr-TR')} {selectedSale.currency}
+                          </p>
+                          <p className="text-[10px] font-bold text-gray-400">
+                            Birim: {Number(item.unit_price).toLocaleString('tr-TR')}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <div className="p-6 bg-indigo-600 rounded-[2rem] text-white shadow-xl shadow-indigo-100 flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold opacity-80 uppercase tracking-widest">{t.total}</p>
+                    <p className="text-4xl font-black mt-1">
+                      {Number(selectedSale.total_amount).toLocaleString('tr-TR')} <span className="text-xl opacity-80">{selectedSale.currency}</span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold opacity-80 uppercase tracking-widest">{t.status}</p>
+                    <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider mt-2 shadow-lg ${
+                      selectedSale.status === 'completed' ? 'bg-green-400 text-white' : 
+                      selectedSale.status === 'cancelled' ? 'bg-red-400 text-white' : 'bg-white text-indigo-600'
+                    }`}>
+                      {selectedSale.status === 'completed' ? t.completed : selectedSale.status === 'cancelled' ? t.cancelled : t.pending}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Completion Actions (Only if pending) */}
+                {selectedSale.status === 'pending' && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
+                      <CreditCard className="h-4 w-4 mr-2" /> {lang === 'tr' ? 'Ödeme Yöntemi' : 'Payment Method'}
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-gray-900">
+                      <button 
+                        onClick={() => handleCompleteSale(selectedSale.id, 'cash')}
+                        className="p-6 bg-emerald-50 border border-emerald-100 rounded-3xl hover:bg-emerald-100 hover:scale-[1.02] active:scale-95 transition-all text-center group"
+                      >
+                        <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm group-hover:shadow-md transition-all text-emerald-600">
+                          <Smartphone className="h-6 w-6" />
+                        </div>
+                        <span className="font-black uppercase tracking-wider text-xs">{lang === 'tr' ? 'Nakit' : 'Cash'}</span>
+                      </button>
+
+                      <button 
+                        onClick={() => handleCompleteSale(selectedSale.id, 'card')}
+                        className="p-6 bg-blue-50 border border-blue-100 rounded-3xl hover:bg-blue-100 hover:scale-[1.02] active:scale-95 transition-all text-center group"
+                      >
+                        <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm group-hover:shadow-md transition-all text-blue-600">
+                          <CreditCard className="h-6 w-6" />
+                        </div>
+                        <span className="font-black uppercase tracking-wider text-xs">{lang === 'tr' ? 'Kredi Kartı' : 'Credit Card'}</span>
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                          const list = companies.map(c => `${c.id}: ${c.title}`).join('\n');
+                          const companyId = prompt((lang === 'tr' ? 'Lütfen Cari Seçiniz:\n' : 'Please Select Company:\n') + list);
+                          if (companyId) handleCompleteSale(selectedSale.id, 'cari', parseInt(companyId));
+                        }}
+                        className="p-6 bg-amber-50 border border-amber-100 rounded-3xl hover:bg-amber-100 hover:scale-[1.02] active:scale-95 transition-all text-center group"
+                      >
+                        <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm group-hover:shadow-md transition-all text-amber-600">
+                          <UserIcon className="h-6 w-6" />
+                        </div>
+                        <span className="font-black uppercase tracking-wider text-xs">{lang === 'tr' ? 'Cari Hesap' : 'Current Account'}</span>
+                      </button>
+                    </div>
+
+                    <button 
+                      onClick={() => handleCancelSale(selectedSale.id)}
+                      className="w-full py-4 text-red-500 font-bold hover:bg-red-50 rounded-2xl transition-all flex items-center justify-center"
+                    >
+                      <XCircle className="h-5 w-5 mr-2" /> {lang === 'tr' ? 'Satışı İptal Et' : 'Cancel Sale'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Transaction Modal (Cari Hareket) */}
+      <AnimatePresence>
+        {showTransactionModal && selectedCompany && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                <div>
+                  <h3 className="text-2xl font-black text-gray-900">{selectedCompany.title}</h3>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Cari Hareket Kaydı</p>
+                </div>
+                <button onClick={() => setShowTransactionModal(false)} className="p-3 bg-white hover:bg-gray-100 rounded-2xl transition-all shadow-sm border border-gray-100">
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target as HTMLFormElement);
+                const data = Object.fromEntries(formData.entries());
+                try {
+                  await api.post(`/api/store/companies/${selectedCompany.id}/transactions`, data);
+                  setShowTransactionModal(false);
+                  fetchData();
+                  alert(lang === 'tr' ? "İşlem kaydedildi." : "Transaction saved.");
+                } catch (error: any) {
+                  alert(error.message);
+                }
+              }} className="p-8 space-y-6">
+                <div>
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">{lang === 'tr' ? 'İşlem Tipi' : 'Transaction Type'}</label>
+                  <select name="type" className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 font-bold" required>
+                    <option value="debt">{lang === 'tr' ? 'Borçlandır (Mal Alımı / Satış)' : 'Debt (Charge)'}</option>
+                    <option value="credit">{lang === 'tr' ? 'Alacaklandır (Tahsilat / Ödeme)' : 'Credit (Payment)'}</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">{lang === 'tr' ? 'Tutar' : 'Amount'}</label>
+                  <div className="relative">
+                    <input name="amount" type="number" step="0.01" className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 font-black text-xl" required />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">{selectedCompany.currency || 'TRY'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">{lang === 'tr' ? 'Açıklama' : 'Description'}</label>
+                  <textarea name="description" className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 font-medium h-24" placeholder="..." required />
+                </div>
+
+                <button 
+                  type="submit"
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center"
+                >
+                  <Save className="h-5 w-5 mr-2" /> {lang === 'tr' ? 'İşlemi Kaydet' : 'Save Transaction'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Product Modal */}
+      <AnimatePresence>
+        {showProductModal && (
+          <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden">
+              <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                <h3 className="text-2xl font-black text-gray-900">{editingProduct ? t.editProduct : t.addManual}</h3>
+                <button onClick={() => setShowProductModal(false)} className="p-3 bg-white hover:bg-gray-100 rounded-2xl transition-all shadow-sm border border-gray-100"><X className="h-6 w-6 text-gray-400" /></button>
+              </div>
+              <form onSubmit={handleAddProduct} className="p-8 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t.barcode}</label>
+                    <input name="barcode" defaultValue={editingProduct?.barcode} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t.productName}</label>
+                    <input name="name" defaultValue={editingProduct?.name} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t.price}</label>
+                    <input name="price" type="number" step="0.01" defaultValue={editingProduct?.price} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold" required />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Para Birimi' : 'Currency'}</label>
+                    <select name="currency" defaultValue={editingProduct?.currency || branding.default_currency} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium">
+                      <option value="TRY">TRY (₺)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="GBP">GBP (£)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t.stock}</label>
+                    <input name="stock_quantity" type="number" defaultValue={editingProduct?.stock_quantity || 0} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Kritik Stok' : 'Min Stock'}</label>
+                    <input name="min_stock_level" type="number" defaultValue={editingProduct?.min_stock_level || 5} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{t.description}</label>
+                  <textarea name="description" defaultValue={editingProduct?.description} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium h-24" />
+                </div>
+                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center">
+                  <Save className="h-5 w-5 mr-2" /> {editingProduct ? t.update : t.saveChanges}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Import Modal */}
+      <AnimatePresence>
+        {showImportModal && (
+          <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-black text-gray-900">{t.importExcel}</h3>
+                <button onClick={() => setShowImportModal(false)} className="p-3 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all"><X className="h-6 w-6 text-gray-400" /></button>
+              </div>
+              <form onSubmit={handleImport} className="space-y-6">
+                <div className="border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center group hover:border-indigo-500 transition-colors relative">
+                  <Upload className="h-12 w-12 text-gray-300 mx-auto mb-4 group-hover:text-indigo-500 transition-colors" />
+                  <p className="text-sm font-bold text-gray-500">{lang === 'tr' ? 'Excel dosyasını buraya sürükleyin veya seçin' : 'Drag and drop Excel file here or browse'}</p>
+                  <input type="file" name="file" accept=".xlsx, .xls" className="absolute inset-0 opacity-0 cursor-pointer" required />
+                </div>
+                <div className="bg-amber-50 rounded-2xl p-4 flex items-start space-x-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-amber-700 leading-relaxed">
+                    {lang === 'tr' ? 'Dosyanızda şu sütunlar olmalıdır: Barkod, Ürün Adı, Fiyat, Stok Adedi, Açıklama' : 'Your file must have these columns: Barcode, Product Name, Price, Stock, Description'}
+                  </p>
+                </div>
+                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all">
+                  {t.importExcel}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Company Modal */}
+      <AnimatePresence>
+        {showCompanyModal && (
+          <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden">
+              <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                <h3 className="text-2xl font-black text-gray-900">{editingCompany ? (lang === 'tr' ? 'Şirketi Düzenle' : 'Edit Company') : (lang === 'tr' ? 'Yeni Şirket Ekle' : 'Add New Company')}</h3>
+                <button onClick={() => setShowCompanyModal(false)} className="p-3 bg-white hover:bg-gray-100 rounded-2xl transition-all shadow-sm border border-gray-100"><X className="h-6 w-6 text-gray-400" /></button>
+              </div>
+              <form onSubmit={handleAddCompany} className="p-8 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Şirket Ünvanı' : 'Company Title'}</label>
+                  <input name="title" defaultValue={editingCompany?.title} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Vergi No' : 'Tax ID'}</label>
+                    <input name="tax_id" defaultValue={editingCompany?.tax_id} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Telefon' : 'Phone'}</label>
+                    <input name="phone" defaultValue={editingCompany?.phone} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Email</label>
+                  <input name="email" type="email" defaultValue={editingCompany?.email} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Adres' : 'Address'}</label>
+                  <textarea name="address" defaultValue={editingCompany?.address} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium h-24" />
+                </div>
+                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center">
+                  <Save className="h-5 w-5 mr-2" /> {editingCompany ? t.update : t.saveChanges}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* User Modal */}
+      <AnimatePresence>
+        {showUserModal && (
+          <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-black text-gray-900">{t.addUser}</h3>
+                <button onClick={() => setShowUserModal(false)} className="p-3 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all"><X className="h-6 w-6 text-gray-400" /></button>
+              </div>
+              <form onSubmit={handleAddUser} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Kullanıcı Adı' : 'Username'}</label>
+                  <input name="username" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Şifre' : 'Password'}</label>
+                  <input name="password" type="password" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Rol' : 'Role'}</label>
+                  <select name="role" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium">
+                    <option value="admin">Admin</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                </div>
+                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all mt-4">
+                  {lang === 'tr' ? 'Kullanıcıyı Kaydet' : 'Save User'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Quotation Modal */}
+      <AnimatePresence>
+        {showQuotationModal && (
+          <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-black text-gray-900">{editingQuotation ? (lang === 'tr' ? 'Teklifi Düzenle' : 'Edit Quotation') : (lang === 'tr' ? 'Yeni Teklif' : 'New Quotation')}</h3>
+                <button onClick={() => setShowQuotationModal(false)} className="p-3 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all"><X className="h-6 w-6 text-gray-400" /></button>
+              </div>
+              <form onSubmit={handleAddQuotation} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Şirket Seçin' : 'Select Company'}</label>
+                  <select name="company_id" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required>
+                    {companies.map(c => (
+                      <option key={c.id} value={c.id}>{c.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Notlar' : 'Notes'}</label>
+                  <textarea name="notes" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium h-32" placeholder="..." />
+                </div>
+                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all mt-4">
+                  {lang === 'tr' ? 'Teklifi Kaydet' : 'Save Quotation'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
