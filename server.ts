@@ -247,7 +247,19 @@ async function startServer() {
   // Store Admin: Info & Branding
   app.get("/api/store/info", authenticate, async (req: any, res) => {
     const storeId = getStoreId(req);
-    const store = (await pool.query("SELECT * FROM stores WHERE id = $1", [storeId])).rows[0];
+    const slug = req.query.slug;
+    
+    let storeRes;
+    if (storeId) {
+      storeRes = await pool.query("SELECT * FROM stores WHERE id = $1", [storeId]);
+    } else if (slug) {
+      storeRes = await pool.query("SELECT * FROM stores WHERE slug = $1", [slug]);
+    } else {
+      return res.status(400).json({ error: "Store ID or Slug required" });
+    }
+
+    const store = storeRes.rows[0];
+    if (!store) return res.status(404).json({ error: "Store not found" });
     res.json(store);
   });
 
