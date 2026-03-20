@@ -154,10 +154,21 @@ async function startServer() {
     }
   };
 
-  const getStoreId = (req: any) => {
+  const getStoreId = async (req: any) => {
+    // 1. Check explicit query/body ID
     const explicitId = req.query.storeId || req.body.storeId;
     if (explicitId) return parseInt(explicitId);
-    return req.user?.store_id || null;
+
+    // 2. Check JWT user data
+    if (req.user?.store_id) return req.user.store_id;
+
+    // 3. Fallback: Lookup by slug if provided in query (for admin views)
+    if (req.query.slug) {
+      const store = (await pool.query("SELECT id FROM stores WHERE slug = $1", [req.query.slug])).rows[0];
+      if (store) return store.id;
+    }
+
+    return null;
   };
 
   // --- API ROUTES ---
@@ -219,34 +230,34 @@ async function startServer() {
 
   // Store Admin: Products
   app.get("/api/store/products", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
+    const storeId = await getStoreId(req);
     const products = await pool.query("SELECT * FROM products WHERE store_id = $1", [storeId]);
     res.json(products.rows);
   });
 
   app.post("/api/store/products", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
+    const storeId = await getStoreId(req);
     const { barcode, name, price, currency, description } = req.body;
     await pool.query("INSERT INTO products (store_id, barcode, name, price, currency, description) VALUES ($1, $2, $3, $4, $5, $6)", [storeId, barcode, name, price, currency, description]);
     res.json({ success: true });
   });
 
   app.put("/api/store/products/:id", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
+    const storeId = await getStoreId(req);
     const { barcode, name, price, currency, description } = req.body;
     await pool.query("UPDATE products SET barcode = $1, name = $2, price = $3, currency = $4, description = $5 WHERE id = $6 AND store_id = $7", [barcode, name, price, currency, description, req.params.id, storeId]);
     res.json({ success: true });
   });
 
   app.delete("/api/store/products/:id", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
+    const storeId = await getStoreId(req);
     await pool.query("DELETE FROM products WHERE id = $1 AND store_id = $2", [req.params.id, storeId]);
     res.json({ success: true });
   });
 
   // Store Admin: Info & Branding
   app.get("/api/store/info", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
+    const storeId = await getStoreId(req);
     const slug = req.query.slug;
     
     let storeRes;
@@ -314,20 +325,20 @@ async function startServer() {
 
   // Store Admin: Users
   app.get("/api/store/users", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
+    const storeId = await getStoreId(req);
     const users = (await pool.query("SELECT id, email, role FROM users WHERE store_id = $1", [storeId])).rows;
     res.json(users);
   });
 
   app.delete("/api/store/users/:id", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
+    const storeId = await getStoreId(req);
     await pool.query("DELETE FROM users WHERE id = $1 AND store_id = $2", [req.params.id, storeId]);
     res.json({ success: true });
   });
 
   // Store Admin: Analytics
   app.get("/api/store/analytics", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
+    const storeId = await getStoreId(req);
     const totalScans = (await pool.query("SELECT COUNT(*)::INT as count FROM scan_logs WHERE store_id = $1", [storeId])).rows[0];
     const topProducts = (await pool.query("SELECT p.name, COUNT(l.id)::INT as count FROM scan_logs l JOIN products p ON l.product_id = p.id WHERE l.store_id = $1 GROUP BY p.name ORDER BY count DESC LIMIT 5", [storeId])).rows;
     res.json({ totalScans, topProducts });
