@@ -32,9 +32,13 @@ export const api = {
   // Branding & Store Info
   getBranding: (slug: string) => api.get(`/api/store/info?slug=${slug}`),
   
-  // Admin (Keep for now if still needed for store management)
+  // Admin & SuperAdmin
   getStores: () => api.get("/api/admin/stores"),
   addStore: (data: any) => api.post("/api/admin/stores", data),
+  updateStore: (id: number, data: any) => api.put(`/api/admin/stores/${id}`, data),
+  deleteStore: (id: number, password: string) => api.post(`/api/admin/stores/${id}/delete`, { password }),
+  getLeads: () => api.get("/api/admin/leads"),
+  updateLead: (id: number, data: any) => api.put(`/api/admin/leads/${id}`, data),
   
   // Public
   getProductBySlug: (slug: string, barcode: string) => api.get(`/api/public/scan/${slug}/${barcode}`),
