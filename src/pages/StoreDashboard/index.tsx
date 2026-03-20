@@ -332,24 +332,6 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
           </div>
         )}
 
-        {showImportModal && (
-          <div className="fixed inset-0 bg-slate-900/60 z-[110] flex items-center justify-center p-4 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 border border-slate-100">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-slate-900">{t.importExcel}</h3>
-                <button onClick={() => setShowImportModal(false)} className="p-2 hover:bg-slate-50 rounded-xl transition-all"><X className="h-5 w-5 text-slate-400" /></button>
-              </div>
-              <form onSubmit={handleImport} className="space-y-6">
-                <div className="p-8 border-2 border-dashed border-slate-200 rounded-2xl hover:border-indigo-500 transition-all group relative bg-slate-50/50">
-                   <Upload className="h-8 w-8 text-slate-300 mx-auto mb-4 group-hover:text-indigo-500 transition-colors" />
-                   <p className="text-sm font-bold text-slate-500 text-center">Excel dosyasını sürükleyin veya <span className="text-indigo-600">tıklayın</span></p>
-                   <input type="file" name="file" accept=".xlsx, .xls" required className="absolute inset-0 opacity-0 cursor-pointer" />
-                </div>
-                <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-black transition-all shadow-xl">{t.importExcel}</button>
-              </form>
-            </motion.div>
-          </div>
-        )}
       </AnimatePresence>
     </div>
   );

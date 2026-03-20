@@ -111,6 +111,21 @@ export default function SuperAdminDashboard({ token }: SuperAdminDashboardProps)
     } catch (error) { alert("Hata"); }
   };
 
+  const handleDeleteStore = async (id: number) => {
+    if (deletePassword !== "reset123") {
+      alert("Hatalı doğrulama şifresi.");
+      return;
+    }
+    try {
+      await api.delete(`/api/admin/stores/${id}`);
+      setStoreToDelete(null);
+      setDeletePassword("");
+      fetchData();
+    } catch (error) {
+      alert("Mağaza silinemedi.");
+    }
+  };
+
   return (
     <div className="flex h-screen bg-[#F8FAFC] overflow-hidden">
       {/* Sidebar - GitHub Style (Admin) */}
@@ -248,7 +263,6 @@ export default function SuperAdminDashboard({ token }: SuperAdminDashboardProps)
                   <h2 className="text-2xl font-black text-slate-900">Mağaza Kaydı</h2>
                   <button onClick={() => setShowAdd(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-all"><X /></button>
                </div>
-               {/* Simplified form for SuperAdmin */}
                <form onSubmit={handleAddStore} className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mağaza Adı</label>
@@ -268,6 +282,35 @@ export default function SuperAdminDashboard({ token }: SuperAdminDashboardProps)
                   </div>
                   <button type="submit" className="col-span-2 py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-xl hover:bg-indigo-700 transition-all mt-4">Mağazayı Oluştur</button>
                </form>
+            </motion.div>
+          </div>
+        )}
+
+        {storeToDelete && (
+          <div className="fixed inset-0 bg-slate-900/60 z-[120] flex items-center justify-center p-4 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-8 border border-rose-100">
+               <div className="flex items-center space-x-3 mb-6">
+                 <div className="p-3 bg-rose-50 rounded-2xl text-rose-600">
+                   <AlertTriangle className="h-6 w-6" />
+                 </div>
+                 <h3 className="text-xl font-bold text-slate-900">Mağazayı Sil?</h3>
+               </div>
+               <p className="text-slate-500 font-medium mb-6">
+                 <strong className="text-slate-900">{storeToDelete.name}</strong> mağazasını ve tüm verilerini silmek üzeresiniz. Bu işlem geri alınamaz. Devam etmek için <code className="bg-slate-100 px-1.5 py-0.5 rounded text-rose-600">reset123</code> yazın.
+               </p>
+               <div className="space-y-4">
+                 <input 
+                   type="text" 
+                   value={deletePassword}
+                   onChange={e => setDeletePassword(e.target.value)}
+                   placeholder="Onay kodu"
+                   className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-rose-500 transition-all"
+                 />
+                 <div className="flex gap-3 pt-2">
+                   <button onClick={() => setStoreToDelete(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all">Vazgeç</button>
+                   <button onClick={() => handleDeleteStore(storeToDelete.id)} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100">Sil</button>
+                 </div>
+               </div>
             </motion.div>
           </div>
         )}

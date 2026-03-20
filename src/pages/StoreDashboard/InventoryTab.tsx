@@ -72,20 +72,7 @@ const InventoryTab = ({
           />
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-          <button 
-            onClick={onImportExcel}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all whitespace-nowrap"
-          >
-            <Upload className="h-4 w-4" />
-            <span>{t.importExcel}</span>
-          </button>
-          <button 
-            onClick={onExportExcel}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all whitespace-nowrap"
-          >
-            <Download className="h-4 w-4" />
-            <span>{t.exportExcel}</span>
-          </button>
+          {/* Action buttons removed for clean slate */}
         </div>
       </div>
 

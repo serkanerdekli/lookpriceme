@@ -7,7 +7,6 @@ import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import multer from "multer";
-import * as XLSX from "xlsx";
 import fs from "fs";
 import dotenv from "dotenv";
 
@@ -121,10 +120,10 @@ async function initDb() {
     `);
 
     // Seed Super Admin if not exists
-    const adminEmail = "admin@pricecheck.com";
+    const adminEmail = "serkanerdekli@gmail.com";
     const existingAdmin = await client.query("SELECT * FROM users WHERE email = $1", [adminEmail]);
     if (existingAdmin.rows.length === 0) {
-      const hashedPassword = bcrypt.hashSync("admin123", 10);
+      const hashedPassword = bcrypt.hashSync("LookPrice2026!", 10);
       await client.query("INSERT INTO users (email, password, role) VALUES ($1, $2, $3)", [adminEmail, hashedPassword, "superadmin"]);
     }
   } finally {
@@ -287,40 +286,34 @@ async function startServer() {
   // File Upload
   app.post("/api/store/upload/:id", authenticate, upload.single("file"), async (req: any, res) => {
     if (!req.file) return res.status(400).send("No file uploaded.");
-    // In a real app, you'd upload to S3/Supabase. For now, we return a local or mock URL.
     res.json({ url: `/uploads/${req.file.filename}` });
   });
 
-  // Excel Import/Export
-  app.post("/api/store/products/import/:id", authenticate, upload.single("file"), async (req: any, res) => {
-    const storeId = parseInt(req.params.id);
-    const workbook = XLSX.readFile(req.file!.path);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data: any[] = XLSX.utils.sheet_to_json(sheet);
-
-    for (const row of data) {
-      const barcode = row.barcode || row.Barkod;
-      const name = row.name || row.UrunAdi || row.Ad;
-      const price = parseFloat(row.price || row.Fiyat || 0);
-      if (barcode && name) {
-        await pool.query(
-          "INSERT INTO products (store_id, barcode, name, price) VALUES ($1, $2, $3, $4) ON CONFLICT (store_id, barcode) DO UPDATE SET name = EXCLUDED.name, price = EXCLUDED.price",
-          [storeId, barcode, name, price]
-        );
-      }
-    }
+  // Admin: Delete Store
+  app.delete("/api/admin/stores/:id", authenticate, async (req: any, res) => {
+    if (req.user.role !== 'superadmin') return res.status(403).json({ error: "Unauthorized" });
+    const storeId = req.params.id;
+    await pool.query("DELETE FROM scan_logs WHERE store_id = $1", [storeId]);
+    await pool.query("DELETE FROM products WHERE store_id = $1", [storeId]);
+    await pool.query("DELETE FROM users WHERE store_id = $1", [storeId]);
+    await pool.query("DELETE FROM stores WHERE id = $1", [storeId]);
     res.json({ success: true });
   });
 
-  app.get("/api/store/products/export/:id", authenticate, async (req: any, res) => {
-    const storeId = parseInt(req.params.id);
-    const products = (await pool.query("SELECT barcode, name, price, currency FROM products WHERE store_id = $1", [storeId])).rows;
-    const ws = XLSX.utils.json_to_sheet(products);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Products");
-    const filePath = path.join(__dirname, `uploads/export_${storeId}.xlsx`);
-    XLSX.writeFile(wb, filePath);
-    res.json({ url: `/uploads/export_${storeId}.xlsx` });
+  // Admin: Full Database Reset (ONE-TIME USE)
+  app.post("/api/admin/reset", authenticate, async (req: any, res) => {
+    if (req.user.role !== 'superadmin') return res.status(403).json({ error: "Unauthorized" });
+    try {
+      await pool.query("DELETE FROM scan_logs");
+      await pool.query("DELETE FROM products");
+      await pool.query("DELETE FROM users WHERE role != 'superadmin'");
+      await pool.query("DELETE FROM stores");
+      await pool.query("DELETE FROM leads");
+      await pool.query("DELETE FROM registration_requests");
+      res.json({ success: true, message: "Database reset complete. Only SuperAdmin remains." });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // Store Admin: Users
