@@ -263,11 +263,53 @@ async function startServer() {
     res.json(store);
   });
 
-  app.post("/api/store/branding", authenticate, async (req: any, res) => {
-    const storeId = getStoreId(req);
-    const { logo_url, primary_color, default_currency, language } = req.body;
-    await pool.query("UPDATE stores SET logo_url = $1, primary_color = $2, default_currency = $3, language = $4 WHERE id = $5", [logo_url, primary_color, default_currency, language, storeId]);
+  app.put("/api/store/branding/:id", authenticate, async (req: any, res) => {
+    const storeId = parseInt(req.params.id);
+    const { store_name, primary_color, logo_url, favicon_url, default_currency, language } = req.body;
+    await pool.query(
+      "UPDATE stores SET name = $1, primary_color = $2, logo_url = $3, background_image_url = $4, default_currency = $5, language = $6 WHERE id = $7",
+      [store_name, primary_color, logo_url, favicon_url, default_currency, language, storeId]
+    );
     res.json({ success: true });
+  });
+
+  // File Upload
+  app.post("/api/store/upload/:id", authenticate, upload.single("file"), async (req: any, res) => {
+    if (!req.file) return res.status(400).send("No file uploaded.");
+    // In a real app, you'd upload to S3/Supabase. For now, we return a local or mock URL.
+    res.json({ url: `/uploads/${req.file.filename}` });
+  });
+
+  // Excel Import/Export
+  app.post("/api/store/products/import/:id", authenticate, upload.single("file"), async (req: any, res) => {
+    const storeId = parseInt(req.params.id);
+    const workbook = XLSX.readFile(req.file!.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data: any[] = XLSX.utils.sheet_to_json(sheet);
+
+    for (const row of data) {
+      const barcode = row.barcode || row.Barkod;
+      const name = row.name || row.UrunAdi || row.Ad;
+      const price = parseFloat(row.price || row.Fiyat || 0);
+      if (barcode && name) {
+        await pool.query(
+          "INSERT INTO products (store_id, barcode, name, price) VALUES ($1, $2, $3, $4) ON CONFLICT (store_id, barcode) DO UPDATE SET name = EXCLUDED.name, price = EXCLUDED.price",
+          [storeId, barcode, name, price]
+        );
+      }
+    }
+    res.json({ success: true });
+  });
+
+  app.get("/api/store/products/export/:id", authenticate, async (req: any, res) => {
+    const storeId = parseInt(req.params.id);
+    const products = (await pool.query("SELECT barcode, name, price, currency FROM products WHERE store_id = $1", [storeId])).rows;
+    const ws = XLSX.utils.json_to_sheet(products);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Products");
+    const filePath = path.join(__dirname, `uploads/export_${storeId}.xlsx`);
+    XLSX.writeFile(wb, filePath);
+    res.json({ url: `/uploads/export_${storeId}.xlsx` });
   });
 
   // Store Admin: Users
@@ -275,6 +317,12 @@ async function startServer() {
     const storeId = getStoreId(req);
     const users = (await pool.query("SELECT id, email, role FROM users WHERE store_id = $1", [storeId])).rows;
     res.json(users);
+  });
+
+  app.delete("/api/store/users/:id", authenticate, async (req: any, res) => {
+    const storeId = getStoreId(req);
+    await pool.query("DELETE FROM users WHERE id = $1 AND store_id = $2", [req.params.id, storeId]);
+    res.json({ success: true });
   });
 
   // Store Admin: Analytics
@@ -304,9 +352,18 @@ async function startServer() {
     res.json(requests);
   });
 
+  // API 404 Handler
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+  });
+
   // Serve Frontend
   const distPath = path.join(__dirname, "dist");
   if (fs.existsSync(distPath)) {
+    if (!fs.existsSync(path.join(__dirname, "uploads"))) {
+      fs.mkdirSync(path.join(__dirname, "uploads"));
+    }
+    app.use("/uploads", express.static(path.join(__dirname, "uploads")));
     app.use(express.static(distPath));
     app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
