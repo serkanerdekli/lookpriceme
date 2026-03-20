@@ -104,7 +104,7 @@ export default function App() {
         } />
 
         <Route path="/admin" element={
-          token && user?.role === 'superadmin' ? <SuperAdminDashboard token={token} /> : <Navigate to="/login" />
+          token && user?.role === 'superadmin' ? <SuperAdminDashboard token={token} onLogout={handleLogout} /> : <Navigate to="/login" />
         } />
 
         <Route path="/" element={

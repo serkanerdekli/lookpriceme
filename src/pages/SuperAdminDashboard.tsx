@@ -22,9 +22,10 @@ import { api } from "../services/api";
 
 interface SuperAdminDashboardProps {
   token: string;
+  onLogout: () => void;
 }
 
-export default function SuperAdminDashboard({ token }: SuperAdminDashboardProps) {
+export default function SuperAdminDashboard({ token, onLogout }: SuperAdminDashboardProps) {
   const { lang } = useLanguage();
   const st = translations[lang].superAdmin;
   
@@ -148,7 +149,7 @@ export default function SuperAdminDashboard({ token }: SuperAdminDashboardProps)
           </button>
         </nav>
         <div className="p-4 mt-auto">
-          <button onClick={() => window.location.href='/login'} className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all font-bold text-sm">
+          <button onClick={onLogout} className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all font-bold text-sm">
             <LogOut className="h-4 w-4" />
             <span>Çıkış Yap</span>
           </button>

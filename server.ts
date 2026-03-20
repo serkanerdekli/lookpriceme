@@ -54,6 +54,8 @@ async function initDb() {
         primary_color TEXT DEFAULT '#4f46e5',
         default_currency TEXT DEFAULT 'TRY',
         language TEXT DEFAULT 'tr',
+        plan TEXT DEFAULT 'free',
+        subscription_end DATE,
         background_image_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -118,6 +120,12 @@ async function initDb() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Add columns if missing (for existing DBs)
+    await client.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free'`);
+    await client.query(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS subscription_end DATE`);
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'TRY'`);
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS min_stock_level INTEGER DEFAULT 5`);
 
     // Seed Super Admin if not exists
     const adminEmail = "serkanerdekli@gmail.com";
@@ -354,6 +362,57 @@ async function startServer() {
     if (req.user.role !== 'superadmin') return res.status(403).send("Forbidden");
     const requests = (await pool.query("SELECT * FROM registration_requests ORDER BY created_at DESC")).rows;
     res.json(requests);
+  });
+
+  // Admin: Create Store (+ admin user for that store)
+  app.post("/api/admin/stores", authenticate, async (req: any, res) => {
+    if (req.user.role !== 'superadmin') return res.status(403).json({ error: "Unauthorized" });
+    const { name, slug, address, contact_person, phone, email, admin_email, admin_password, subscription_end, default_currency, language, plan } = req.body;
+    try {
+      const storeRes = await pool.query(
+        "INSERT INTO stores (name, slug, address, phone, email, default_currency, language, plan, subscription_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
+        [name, slug, address, phone, email || admin_email, default_currency || 'TRY', language || 'tr', plan || 'free', subscription_end || null]
+      );
+      const store = storeRes.rows[0];
+      // Create admin user for this store
+      if (admin_email && admin_password) {
+        const hashedPassword = bcrypt.hashSync(admin_password, 10);
+        await pool.query(
+          "INSERT INTO users (store_id, email, password, role) VALUES ($1, $2, $3, $4)",
+          [store.id, admin_email, hashedPassword, "storeadmin"]
+        );
+      }
+      res.json(store);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Update Store
+  app.put("/api/admin/stores/:id", authenticate, async (req: any, res) => {
+    if (req.user.role !== 'superadmin') return res.status(403).json({ error: "Unauthorized" });
+    const { name, slug, address, phone, email, default_currency, language, plan, subscription_end } = req.body;
+    try {
+      await pool.query(
+        "UPDATE stores SET name=$1, slug=$2, address=$3, phone=$4, email=$5, default_currency=$6, language=$7, plan=$8, subscription_end=$9 WHERE id=$10",
+        [name, slug, address, phone, email, default_currency, language, plan, subscription_end, req.params.id]
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Update Lead
+  app.put("/api/admin/leads/:id", authenticate, async (req: any, res) => {
+    if (req.user.role !== 'superadmin') return res.status(403).json({ error: "Unauthorized" });
+    const { status, notes } = req.body;
+    try {
+      await pool.query("UPDATE leads SET status=$1, notes=$2 WHERE id=$3", [status, notes, req.params.id]);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // API 404 Handler
