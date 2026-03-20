@@ -7,7 +7,10 @@ import {
   XCircle, 
   ChevronRight, 
   Download,
-  CreditCard
+  CreditCard,
+  User as UserIcon,
+  Landmark,
+  Smartphone
 } from "lucide-react";
 import { translations } from "../../translations";
 import { useLanguage } from "../../contexts/LanguageContext";
@@ -128,8 +131,11 @@ const PosTab = ({
                       <div className="font-black text-gray-900">
                         {Number(s.total_amount).toLocaleString('tr-TR')} {s.currency}
                       </div>
-                      <div className="text-[10px] text-gray-400 uppercase font-bold">
-                        {s.payment_method === 'cash' ? (lang === 'tr' ? 'Nakit' : 'Cash') : (lang === 'tr' ? 'Kredi Kartı' : 'Credit Card')}
+                      <div className="text-[10px] text-gray-400 uppercase font-bold flex items-center gap-1 mt-1">
+                        {s.payment_method === 'cash' && <><Smartphone className="h-3 w-3" /> {lang === 'tr' ? 'Nakit' : 'Cash'}</>}
+                        {s.payment_method === 'card' && <><CreditCard className="h-3 w-3" /> {lang === 'tr' ? 'Kredi Kartı' : 'Credit Card'}</>}
+                        {s.payment_method === 'bank' && <><Landmark className="h-3 w-3" /> {lang === 'tr' ? 'Banka/EFT' : 'Bank/EFT'}</>}
+                        {s.payment_method === 'cari' && <><UserIcon className="h-3 w-3" /> {lang === 'tr' ? 'Vadeli (Cari Borç)' : 'Deferred (Cari Debt)'}</>}
                       </div>
                     </td>
                     <td className="px-6 py-4">

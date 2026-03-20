@@ -42,30 +42,43 @@ export const api = {
   },
 
   // Store Methods
-  getProducts: () => api.get("/api/store/products"),
+  getProducts: (storeId?: number) => api.get(`/api/store/products${storeId ? `?storeId=${storeId}` : ""}`),
   addProduct: (data: any) => api.post("/api/store/products", data),
   updateProduct: (id: number, data: any) => api.put(`/api/store/products/${id}`, data),
   deleteProduct: (id: number) => api.delete(`/api/store/products/${id}`),
   deleteAllProducts: () => api.delete("/api/store/products/all"),
   importProducts: (formData: FormData) => api.upload("/api/store/import", formData),
   
-  getAnalytics: () => api.get("/api/store/analytics"),
-  getBranding: () => api.get("/api/store/info"),
+  getAnalytics: (storeId?: number) => api.get(`/api/store/analytics${storeId ? `?storeId=${storeId}` : ""}`),
+  getBranding: (slug?: string) => api.get(`/api/store/info${slug ? `?slug=${slug}` : ""}`),
   updateBranding: (data: any) => api.post("/api/store/branding", data),
   
-  getQuotations: (search = "", status = "all") => api.get(`/api/store/quotations?search=${search}&status=${status}`),
+  getQuotations: (search = "", status = "all", storeId?: number) => {
+    let url = `/api/store/quotations?search=${search}&status=${status}`;
+    if (storeId) url += `&storeId=${storeId}`;
+    return api.get(url);
+  },
   addQuotation: (data: any) => api.post("/api/store/quotations", data),
-  approveQuotation: (id: number) => api.post(`/api/store/quotations/${id}/approve`, {}),
+  approveQuotation: (id: number) => api.post(`/api/store/quotations/${id}/convert-to-sale`, { paymentMethod: 'cari' }),
   deleteQuotation: (id: number) => api.delete(`/api/store/quotations/${id}`),
   updateQuotation: (id: number, data: any) => api.put(`/api/store/quotations/${id}`, data),
+  convertToSale: (id: number, data: any) => api.post(`/api/store/quotations/${id}/convert-to-sale`, data),
 
-  getCompanies: (includeZero = false) => api.get(`/api/store/companies?includeZero=${includeZero}`),
+  getCompanies: (includeZero = false, storeId?: number) => {
+    let url = `/api/store/companies?includeZero=${includeZero}`;
+    if (storeId) url += `&storeId=${storeId}`;
+    return api.get(url);
+  },
   addCompany: (data: any) => api.post("/api/store/companies", data),
   updateCompany: (id: number, data: any) => api.put(`/api/store/companies/${id}`, data),
 
-  getSales: (status = "all", start = "", end = "") => api.get(`/api/store/sales?status=${status}&startDate=${start}&endDate=${end}`),
+  getSales: (status = "all", start = "", end = "", storeId?: number) => {
+    let url = `/api/store/sales?status=${status}&startDate=${start}&endDate=${end}`;
+    if (storeId) url += `&storeId=${storeId}`;
+    return api.get(url);
+  },
   
-  getUsers: () => api.get("/api/store/users"),
+  getUsers: (storeId?: number) => api.get(`/api/store/users${storeId ? `?storeId=${storeId}` : ""}`),
   addUser: (data: any) => api.post("/api/store/users", data),
   deleteUser: (id: number) => api.delete(`/api/store/users/${id}`),
 

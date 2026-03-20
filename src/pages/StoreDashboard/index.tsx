@@ -37,6 +37,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { translations } from "../../translations";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { api } from "../../services/api";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { User, Product, Store as StoreType } from "../../types";
 
 // Import Tabs
@@ -92,6 +94,10 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
   const [users, setUsers] = useState<any[]>([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [quotationItems, setQuotationItems] = useState<any[]>([]);
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [conversionQuotation, setConversionQuotation] = useState<any>(null);
+  const [isNewCompany, setIsNewCompany] = useState(false);
 
   const isViewer = user.role === 'viewer';
 
@@ -99,12 +105,12 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
     try {
       setLoading(true);
       const [productsRes, analyticsRes, brandingRes, quotationsRes, companiesRes, usersRes] = await Promise.all([
-        api.getProducts(),
-        api.getAnalytics(),
-        api.getBranding(),
-        api.getQuotations(quotationSearch, quotationStatusFilter),
-        api.getCompanies(includeZeroBalance),
-        api.getUsers()
+        api.getProducts(user.store_id),
+        api.getAnalytics(user.store_id),
+        api.getBranding(user.store_slug),
+        api.getQuotations(quotationSearch, quotationStatusFilter, user.store_id),
+        api.getCompanies(includeZeroBalance, user.store_id),
+        api.getUsers(user.store_id)
       ]);
       setProducts(productsRes);
       setAnalytics(analyticsRes);
@@ -124,7 +130,7 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
   const fetchSales = useCallback(async () => {
     try {
       setSalesLoading(true);
-      const res = await api.getSales(salesStatusFilter, salesStartDate, salesEndDate);
+      const res = await api.getSales(salesStatusFilter, salesStartDate, salesEndDate, user.store_id);
       setSales(res);
     } catch (error) {
       console.error("Fetch sales error:", error);
@@ -222,17 +228,135 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
   };
 
   // Handlers for Quotations
+  const handleQuotationItemChange = (index: number, field: string, value: any) => {
+    const newItems = [...quotationItems];
+    newItems[index][field] = value;
+    if (field === 'quantity' || field === 'unit_price') {
+      newItems[index].total_price = (Number(newItems[index].quantity) || 0) * (Number(newItems[index].unit_price) || 0);
+    }
+    setQuotationItems(newItems);
+  };
+
+  const addQuotationItem = () => {
+    setQuotationItems([...quotationItems, { product_name: '', barcode: '', quantity: 1, unit: 'Adet', unit_price: 0, total_price: 0 }]);
+  };
+
+  const removeQuotationItem = (index: number) => {
+    setQuotationItems(quotationItems.filter((_, i) => i !== index));
+  };
+
+  const generateQuotationBarcode = (index: number) => {
+    const barcode = "LP" + Math.random().toString().substring(2, 10);
+    handleQuotationItemChange(index, 'barcode', barcode);
+  };
+
   const handleAddQuotation = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     const data = Object.fromEntries(formData.entries());
+    
+    const quotationData = {
+      ...data,
+      total_amount: quotationItems.reduce((sum, item) => sum + item.total_price, 0),
+      items: quotationItems,
+      company_id: isNewCompany ? null : data.company_id
+    };
+
     try {
+      if (editingQuotation) {
+        await api.updateQuotation(editingQuotation.id, quotationData);
+      } else {
+        await api.addQuotation(quotationData);
+      }
       setShowQuotationModal(false);
       setEditingQuotation(null);
+      setQuotationItems([]);
       fetchData();
-    } catch (error) {
-      alert("Hata oluştu");
+    } catch (error: any) {
+      alert(error.message || "Hata oluştu");
     }
+  };
+
+  const handleConvertToSale = async (quotationId: number, paymentMethod: string, dueDate?: string) => {
+    try {
+      setLoading(true);
+      await api.convertToSale(quotationId, { paymentMethod, dueDate });
+      setShowConvertModal(false);
+      setConversionQuotation(null);
+      fetchSales();
+      fetchData();
+      alert(lang === 'tr' ? "Teklif başarıyla satışa dönüştürüldü." : "Quotation successfully converted to sale.");
+    } catch (error: any) {
+      alert(error.message || "Hata oluştu");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGeneratePDF = (q: any) => {
+    const doc = new jsPDF();
+    const isTr = lang === 'tr';
+    
+    // Header
+    doc.setFontSize(20);
+    doc.text(branding.store_name, 105, 15, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(branding.address || '', 105, 22, { align: 'center' });
+    
+    doc.setDrawColor(200, 200, 200);
+    doc.line(10, 28, 200, 28);
+    
+    // Quotation Info
+    doc.setFontSize(14);
+    doc.text(isTr ? "TEKLİF FORMU" : "QUOTATION FORM", 10, 40);
+    
+    doc.setFontSize(10);
+    doc.text(`${isTr ? "Teklif #" : "Quotation #"}: ${q.id}`, 10, 48);
+    doc.text(`${isTr ? "Tarih" : "Date"}: ${new Date(q.created_at).toLocaleDateString(isTr ? 'tr-TR' : 'en-GB')}`, 10, 54);
+    
+    // Client Info
+    doc.text(`${isTr ? "Müşteri" : "Client"}:`, 130, 40);
+    doc.setFontSize(11);
+    doc.text(q.customer_name || '', 130, 48);
+    doc.setFontSize(10);
+    doc.text(q.customer_title || '', 130, 54);
+    
+    // Items Table
+    const tableData = (q.items || []).map((item: any) => [
+      item.product_name,
+      item.barcode || '-',
+      `${item.quantity} ${item.unit || (isTr ? 'Adet' : 'Qty')}`,
+      `${Number(item.unit_price).toLocaleString(isTr ? 'tr-TR' : 'en-GB')} ${q.currency}`,
+      `${Number(item.total_price).toLocaleString(isTr ? 'tr-TR' : 'en-GB')} ${q.currency}`
+    ]);
+    
+    autoTable(doc, {
+      startY: 65,
+      head: [[
+        isTr ? 'Ürün' : 'Product', 
+        isTr ? 'Barkod' : 'Barcode', 
+        isTr ? 'Miktar' : 'Qty', 
+        isTr ? 'B. Fiyat' : 'U. Price', 
+        isTr ? 'Toplam' : 'Total'
+      ]],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [79, 70, 229] }
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    
+    // Grand Total
+    doc.setFontSize(12);
+    doc.text(`${isTr ? "GENEL TOPLAM" : "GRAND TOTAL"}: ${Number(q.total_amount).toLocaleString(isTr ? 'tr-TR' : 'en-GB')} ${q.currency}`, 190, finalY, { align: 'right' });
+    
+    if (q.notes) {
+      doc.setFontSize(9);
+      doc.text(`${isTr ? "Notlar" : "Notes"}:`, 10, finalY + 10);
+      doc.text(q.notes, 10, finalY + 16, { maxWidth: 180 });
+    }
+    
+    doc.save(`Quotation_${q.id}.pdf`);
   };
 
   const handleApproveQuotation = async (id: number) => {
@@ -506,11 +630,27 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
               <QuotationsTab 
                 quotations={quotations}
                 isViewer={isViewer}
-                onAddQuotation={() => { setEditingQuotation(null); setShowQuotationModal(true); }}
-                onViewDetails={(id) => { /* Details logic */ }}
-                onGeneratePDF={(q) => { /* PDF logic */ }}
-                onApprove={handleApproveQuotation}
-                onEdit={(q) => { setEditingQuotation(q); setShowQuotationModal(true); }}
+                onAddQuotation={() => { 
+                  setEditingQuotation(null); 
+                  setQuotationItems([{ product_name: '', barcode: '', quantity: 1, unit: 'Adet', unit_price: 0, total_price: 0 }]);
+                  setIsNewCompany(false);
+                  setShowQuotationModal(true); 
+                }}
+                onViewDetails={(id) => { setSelectedQuotation(quotations.find(q => q.id === id)); }}
+                onGeneratePDF={handleGeneratePDF}
+                onApprove={(id) => {
+                  const q = quotations.find(qt => qt.id === id);
+                  if (q) {
+                    setConversionQuotation(q);
+                    setShowConvertModal(true);
+                  }
+                }}
+                onEdit={(q) => { 
+                  setEditingQuotation(q); 
+                  setQuotationItems(q.items || []);
+                  setIsNewCompany(false);
+                  setShowQuotationModal(true); 
+                }}
                 onDelete={handleDeleteQuotation}
                 onSearchChange={setQuotationSearch}
                 onStatusFilterChange={setQuotationStatusFilter}
@@ -927,27 +1067,157 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
       <AnimatePresence>
         {showQuotationModal && (
           <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8">
-              <div className="flex justify-between items-center mb-8">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+              <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/50 shrink-0">
                 <h3 className="text-2xl font-black text-gray-900">{editingQuotation ? (lang === 'tr' ? 'Teklifi Düzenle' : 'Edit Quotation') : (lang === 'tr' ? 'Yeni Teklif' : 'New Quotation')}</h3>
-                <button onClick={() => setShowQuotationModal(false)} className="p-3 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all"><X className="h-6 w-6 text-gray-400" /></button>
+                <button onClick={() => setShowQuotationModal(false)} className="p-3 bg-white hover:bg-gray-100 rounded-2xl transition-all shadow-sm border border-gray-100"><X className="h-6 w-6 text-gray-400" /></button>
               </div>
-              <form onSubmit={handleAddQuotation} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Şirket Seçin' : 'Select Company'}</label>
-                  <select name="company_id" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required>
-                    {companies.map(c => (
-                      <option key={c.id} value={c.id}>{c.title}</option>
+              <form onSubmit={handleAddQuotation} className="flex-1 overflow-y-auto p-8 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-gray-50 rounded-[2rem] border border-gray-100">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Müşteri Tipi' : 'Customer Type'}</label>
+                      <button type="button" onClick={() => setIsNewCompany(!isNewCompany)} className="text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700">
+                        {isNewCompany ? (lang === 'tr' ? 'Kayıtlı Cari Seç' : 'Select Existing') : (lang === 'tr' ? 'Yeni Cari Ekle' : 'Add New')}
+                      </button>
+                    </div>
+                    {isNewCompany ? (
+                      <div className="space-y-4">
+                        <input name="customer_name" placeholder={lang === 'tr' ? 'Firma Ünvanı' : 'Company Name'} className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required />
+                        <input name="customer_title" placeholder={lang === 'tr' ? 'Yetkili Kişi' : 'Contact Person'} className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" />
+                      </div>
+                    ) : (
+                      <select name="company_id" defaultValue={editingQuotation?.company_id} className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" required>
+                        <option value="">{lang === 'tr' ? 'Şirket Seçin...' : 'Select Company...'}</option>
+                        {companies.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                      </select>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Para Birimi' : 'Currency'}</label>
+                    <select name="currency" defaultValue={editingQuotation?.currency || branding.default_currency} className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium">
+                      <option value="TRY">TRY (₺)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="GBP">GBP (£)</option>
+                    </select>
+                    <textarea name="notes" defaultValue={editingQuotation?.notes} placeholder={lang === 'tr' ? 'Teklif Notları...' : 'Quotation Notes...'} className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium h-24 mt-2" />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">{lang === 'tr' ? 'Teklif Kalemleri' : 'Quotation Items'}</h4>
+                    <button type="button" onClick={addQuotationItem} className="flex items-center text-xs font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl hover:bg-indigo-100 transition-all">
+                      <Plus className="h-4 w-4 mr-2" /> {lang === 'tr' ? 'Satır Ekle' : 'Add Row'}
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {quotationItems.map((item, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-100 relative group">
+                        <div className="col-span-4 md:col-span-3 space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase">{lang === 'tr' ? 'Ürün Adı' : 'Product Name'}</label>
+                          <input value={item.product_name} onChange={e => handleQuotationItemChange(idx, 'product_name', e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-100 rounded-lg text-sm font-medium" required />
+                        </div>
+                        <div className="col-span-4 md:col-span-3 space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase flex justify-between">
+                            {lang === 'tr' ? 'Barkod' : 'Barcode'}
+                            <button type="button" onClick={() => generateQuotationBarcode(idx)} className="text-indigo-600 hover:text-indigo-800">Gen</button>
+                          </label>
+                          <input value={item.barcode} onChange={e => handleQuotationItemChange(idx, 'barcode', e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-100 rounded-lg text-sm font-medium font-mono" />
+                        </div>
+                        <div className="col-span-2 md:col-span-1 space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase">{lang === 'tr' ? 'Adet' : 'Qty'}</label>
+                          <input type="number" step="any" value={item.quantity} onChange={e => handleQuotationItemChange(idx, 'quantity', e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-100 rounded-lg text-sm font-medium" required />
+                        </div>
+                        <div className="col-span-2 md:col-span-1 space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase">{lang === 'tr' ? 'Birim' : 'Unit'}</label>
+                          <input value={item.unit} onChange={e => handleQuotationItemChange(idx, 'unit', e.target.value)} list="units" className="w-full px-3 py-2 bg-white border border-gray-100 rounded-lg text-sm font-medium" />
+                        </div>
+                        <div className="col-span-5 md:col-span-2 space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase">{lang === 'tr' ? 'B. Fiyat' : 'U. Price'}</label>
+                          <input type="number" step="0.01" value={item.unit_price} onChange={e => handleQuotationItemChange(idx, 'unit_price', e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-100 rounded-lg text-sm font-medium" required />
+                        </div>
+                        <div className="col-span-5 md:col-span-2 space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase">{lang === 'tr' ? 'Toplam' : 'Total'}</label>
+                          <div className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-black text-gray-600">
+                            {Number(item.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => removeQuotationItem(idx)} className="absolute -right-2 -top-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-sm">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
                     ))}
+                    {quotationItems.length === 0 && (
+                      <div className="text-center py-10 border-2 border-dashed border-gray-100 rounded-[2rem] text-gray-400 font-bold">
+                        {lang === 'tr' ? 'Henüz kalem eklenmedi' : 'No items added yet'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <datalist id="units">
+                  <option value="Adet" /><option value="Kg" /><option value="Metre" /><option value="Litre" /><option value="Paket" />
+                </datalist>
+
+                <div className="pt-6 border-t border-gray-50 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0">
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{lang === 'tr' ? 'GENEL TOPLAM' : 'GRAND TOTAL'}</p>
+                    <p className="text-3xl font-black text-gray-900">
+                      {quotationItems.reduce((sum, i) => sum + i.total_price, 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <button type="submit" className="w-full md:w-auto px-12 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center">
+                    <Save className="h-5 w-5 mr-3" /> {editingQuotation ? t.update : t.saveQuotation}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Convert to Sale Modal */}
+      <AnimatePresence>
+        {showConvertModal && conversionQuotation && (
+          <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-black text-gray-900">{lang === 'tr' ? 'Satışa Dönüştür' : 'Convert to Sale'}</h3>
+                <button onClick={() => setShowConvertModal(false)} className="p-3 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all"><X className="h-6 w-6 text-gray-400" /></button>
+              </div>
+              
+              <div className="p-6 bg-indigo-50 rounded-[2rem] border border-indigo-100 mb-8">
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">{lang === 'tr' ? 'TEKLİF TUTARI' : 'QUOTATION TOTAL'}</p>
+                <p className="text-3xl font-black text-indigo-700">{Number(conversionQuotation.total_amount).toLocaleString('tr-TR')} {conversionQuotation.currency}</p>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target as HTMLFormElement);
+                handleConvertToSale(conversionQuotation.id, String(formData.get('payment_method')), String(formData.get('due_date')));
+              }} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Ödeme Yöntemi' : 'Payment Method'}</label>
+                  <select name="payment_method" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" defaultValue="cash">
+                    <option value="cash">{lang === 'tr' ? 'Nakit Kasa' : 'Cash'}</option>
+                    <option value="card">{lang === 'tr' ? 'Kredi Kartı' : 'Credit Card'}</option>
+                    <option value="bank">{lang === 'tr' ? 'Banka/EFT' : 'Bank/EFT'}</option>
+                    <option value="cari">{lang === 'tr' ? 'Vadeli (Cari Borç)' : 'Deferred (Cari Debt)'}</option>
                   </select>
                 </div>
+                
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Notlar' : 'Notes'}</label>
-                  <textarea name="notes" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium h-32" placeholder="..." />
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang === 'tr' ? 'Vade Tarihi (Opsiyonel)' : 'Due Date (Optional)'}</label>
+                  <input type="date" name="due_date" className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-medium" />
                 </div>
-                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all mt-4">
-                  {lang === 'tr' ? 'Teklifi Kaydet' : 'Save Quotation'}
-                </button>
+
+                <div className="pt-4 flex gap-3">
+                  <button type="button" onClick={() => setShowConvertModal(false)} className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl font-bold hover:bg-gray-200 transition-all">İptal</button>
+                  <button type="submit" className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all">{lang === 'tr' ? 'Satışı Onayla' : 'Confirm Sale'}</button>
+                </div>
               </form>
             </motion.div>
           </div>

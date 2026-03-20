@@ -4,7 +4,7 @@ import {
   Search, 
   FileText, 
   Download, 
-  CheckCircle2, 
+  ShoppingCart, 
   Trash2, 
   Edit2,
   ChevronRight,
@@ -144,7 +144,7 @@ const QuotationsTab = ({
                         <button 
                           onClick={() => onGeneratePDF(q)}
                           className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                          title={t.downloadPDF}
+                          title={lang === 'tr' ? 'PDF İndir' : 'Download PDF'}
                         >
                           <Download className="h-4 w-4" />
                         </button>
@@ -153,9 +153,9 @@ const QuotationsTab = ({
                             <button 
                               onClick={() => onApprove(q.id)}
                               className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
-                              title={t.approve}
+                              title={lang === 'tr' ? 'Satışa Dönüştür' : 'Convert to Sale'}
                             >
-                              <CheckCircle2 className="h-4 w-4" />
+                              <ShoppingCart className="h-4 w-4" />
                             </button>
                             <button 
                               onClick={() => onEdit(q)}

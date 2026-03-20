@@ -136,11 +136,12 @@ async function initDb() {
       CREATE TABLE IF NOT EXISTS quotations (
         id SERIAL PRIMARY KEY,
         store_id INTEGER NOT NULL,
-        customer_name TEXT NOT NULL,
+        customer_name TEXT,
         customer_title TEXT,
         total_amount DECIMAL(12,2) DEFAULT 0,
         currency TEXT DEFAULT 'TRY',
         notes TEXT,
+        status TEXT DEFAULT 'pending',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
       );
@@ -151,7 +152,8 @@ async function initDb() {
         product_id INTEGER,
         product_name TEXT NOT NULL,
         barcode TEXT,
-        quantity INTEGER DEFAULT 1,
+        quantity DECIMAL(12,2) DEFAULT 1,
+        unit TEXT DEFAULT 'Adet',
         unit_price DECIMAL(12,2) NOT NULL,
         total_price DECIMAL(12,2) NOT NULL,
         FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE CASCADE
@@ -197,6 +199,7 @@ async function initDb() {
         type TEXT CHECK(type IN ('debt', 'credit')) NOT NULL,
         amount DECIMAL(12,2) NOT NULL,
         description TEXT,
+        due_date DATE,
         transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
         FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
@@ -211,8 +214,11 @@ async function initDb() {
         status TEXT CHECK(status IN ('pending', 'completed', 'cancelled')) DEFAULT 'pending',
         customer_name TEXT,
         payment_method TEXT,
+        quotation_id INTEGER,
+        due_date DATE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+        FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
+        FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE SET NULL
       );
 
       CREATE TABLE IF NOT EXISTS sale_items (
@@ -433,13 +439,31 @@ async function startServer() {
     if (!token) return res.status(401).json({ error: "Unauthorized" });
     try {
       req.user = jwt.verify(token, JWT_SECRET);
+      
+      // Safety Log: 
+      if (req.user.role !== 'superadmin' && !req.user.store_id) {
+        console.warn(`[AUTH WARNING] User ${req.user.email || req.user.id} authenticated but has NO store_id! Role: ${req.user.role}`);
+      }
+      
       next();
     } catch (e) {
+      console.error("[AUTH ERROR] JWT verification failed:", e);
       res.status(401).json({ error: "Invalid token" });
     }
   };
 
   // --- HELPER FUNCTIONS ---
+  const getStoreId = (req: any) => {
+    // 1. Explicit storeId (Query or Body) - usually for SuperAdmin or explicit Frontend requests
+    const explicitId = req.query.storeId || req.body.storeId;
+    if (explicitId) return parseInt(explicitId);
+
+    // 2. Session storeId (JWT)
+    if (req.user?.store_id) return req.user.store_id;
+
+    return null;
+  };
+
   const PLAN_LIMITS: Record<string, number> = {
     'free': 50,
     'basic': 50,
@@ -930,7 +954,7 @@ async function startServer() {
 
   // StoreAdmin: Manage Products
   app.get("/api/store/info", authenticate, async (req: any, res) => {
-    const storeId = req.user.role === "superadmin" ? req.query.storeId : req.user.store_id;
+    const storeId = getStoreId(req);
     const slug = req.query.slug;
     
     let storeRes;
@@ -939,6 +963,7 @@ async function startServer() {
     } else if (slug) {
       storeRes = await pool.query("SELECT * FROM stores WHERE slug = $1", [slug]);
     } else {
+      console.error(`[API ERROR] /api/store/info: Neither storeId nor slug provided. User: ${JSON.stringify(req.user)}`);
       return res.status(400).json({ error: "Store ID or Slug required" });
     }
 
@@ -960,8 +985,11 @@ async function startServer() {
   });
 
   app.get("/api/store/analytics", authenticate, async (req: any, res) => {
-    const storeId = req.user.role === "superadmin" ? req.query.storeId : req.user.store_id;
-    if (!storeId) return res.status(400).json({ error: "Store ID required" });
+    const storeId = getStoreId(req);
+    if (!storeId) {
+      console.error(`[API ERROR] /api/store/analytics: Store ID missing. Role: ${req.user.role}`);
+      return res.status(400).json({ error: "Store ID required" });
+    }
 
     const totalScans = (await pool.query("SELECT COUNT(*)::INT as count FROM scan_logs WHERE store_id = $1", [storeId])).rows[0];
     const scansByDay = await pool.query(`
@@ -1006,7 +1034,7 @@ async function startServer() {
   });
 
   app.get("/api/store/users", authenticate, async (req: any, res) => {
-    const storeId = req.user.role === "superadmin" ? req.query.storeId : req.user.store_id;
+    const storeId = getStoreId(req);
     if (!storeId) return res.status(400).json({ error: "Store ID required" });
 
     const users = await pool.query("SELECT id, email, role FROM users WHERE store_id = $1", [storeId]);
@@ -1014,7 +1042,7 @@ async function startServer() {
   });
 
   app.post("/api/store/users", authenticate, async (req: any, res) => {
-    const storeId = req.user.role === "superadmin" ? req.body.storeId : req.user.store_id;
+    const storeId = getStoreId(req);
     if (!storeId) return res.status(400).json({ error: "Store ID required" });
 
     const { email, password, role } = req.body;
@@ -1045,7 +1073,7 @@ async function startServer() {
   });
 
   app.get("/api/store/products", authenticate, async (req: any, res) => {
-    const storeId = req.user.role === "superadmin" ? req.query.storeId : req.user.store_id;
+    const storeId = getStoreId(req);
     if (!storeId) return res.status(400).json({ error: "Store ID required" });
 
     const products = await pool.query("SELECT * FROM products WHERE store_id = $1", [storeId]);
@@ -1053,7 +1081,7 @@ async function startServer() {
   });
 
   app.post("/api/store/products", authenticate, async (req: any, res) => {
-    const storeId = req.user.role === "superadmin" ? req.body.storeId : req.user.store_id;
+    const storeId = getStoreId(req);
     if (!storeId) return res.status(400).json({ error: "Store ID required" });
 
     const { barcode, name, price, currency, description, stock_quantity, min_stock_level } = req.body;
@@ -1083,7 +1111,7 @@ async function startServer() {
   });
 
   app.put("/api/store/products/:id", authenticate, async (req: any, res) => {
-    const storeId = req.user.role === "superadmin" ? req.body.storeId : req.user.store_id;
+    const storeId = getStoreId(req);
     if (!storeId) return res.status(400).json({ error: "Store ID required" });
 
     const { id } = req.params;
@@ -1128,8 +1156,7 @@ async function startServer() {
 
   app.get("/api/store/quotations", authenticate, async (req: any, res) => {
     try {
-      // Strictly enforce store isolation: only superadmins can override storeId via query
-      const storeId = req.user.role === "superadmin" ? (req.query.storeId || req.user.store_id) : req.user.store_id;
+      const storeId = getStoreId(req);
       if (!storeId) return res.status(400).json({ error: "Store ID required" });
       
       const { search, status, startDate, endDate } = req.query;
@@ -1192,21 +1219,52 @@ async function startServer() {
   app.post("/api/store/quotations", authenticate, async (req: any, res) => {
     const client = await pool.connect();
     try {
-      const storeId = req.user.role === "superadmin" ? (req.body.storeId || req.user.store_id) : req.user.store_id;
-      const { customer_name, customer_title, total_amount, currency, notes, items, company_id } = req.body;
+      const storeId = getStoreId(req);
+      let { customer_name, customer_title, total_amount, currency, notes, items, company_id } = req.body;
       
       await client.query("BEGIN");
+
+      // 1. Auto-create/link Company
+      if (!company_id && customer_name) {
+        const existingComp = await client.query(
+          "SELECT id FROM companies WHERE store_id = $1 AND LOWER(TRIM(title)) = LOWER($2)",
+          [storeId, customer_name.trim()]
+        );
+        if (existingComp.rows.length > 0) {
+          company_id = existingComp.rows[0].id;
+        } else {
+          const newComp = await client.query(
+            "INSERT INTO companies (store_id, title) VALUES ($1, $2) RETURNING id",
+            [storeId, customer_name.trim()]
+          );
+          company_id = newComp.rows[0].id;
+        }
+      }
       
       const quotRes = await client.query(
-        "INSERT INTO quotations (store_id, customer_name, customer_title, total_amount, currency, notes, company_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+        "INSERT INTO quotations (store_id, customer_name, customer_title, total_amount, currency, notes, company_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') RETURNING id",
         [storeId, customer_name, customer_title, total_amount, currency, notes, company_id || null]
       );
       const quotationId = quotRes.rows[0].id;
       
       for (const item of items) {
+        // 2. Auto-create Product if barcode provided and not exists
+        if (item.barcode) {
+          const existingProd = await client.query(
+            "SELECT id FROM products WHERE store_id = $1 AND barcode = $2",
+            [storeId, item.barcode]
+          );
+          if (existingProd.rows.length === 0) {
+            await client.query(
+              "INSERT INTO products (store_id, barcode, name, price, currency, stock_quantity) VALUES ($1, $2, $3, $4, $5, 0)",
+              [storeId, item.barcode, item.product_name, item.unit_price, currency]
+            );
+          }
+        }
+
         await client.query(
-          "INSERT INTO quotation_items (quotation_id, product_id, product_name, barcode, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-          [quotationId, item.product_id || null, item.product_name, item.barcode || null, item.quantity, item.unit_price, item.total_price]
+          "INSERT INTO quotation_items (quotation_id, product_id, product_name, barcode, quantity, unit, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+          [quotationId, item.product_id || null, item.product_name, item.barcode || null, item.quantity, item.unit || 'Adet', item.unit_price, item.total_price]
         );
       }
       
@@ -1223,11 +1281,28 @@ async function startServer() {
   app.put("/api/store/quotations/:id", authenticate, async (req: any, res) => {
     const client = await pool.connect();
     try {
-      const storeId = req.user.role === "superadmin" ? (req.body.storeId || req.user.store_id) : req.user.store_id;
+      const storeId = getStoreId(req);
       const { id } = req.params;
-      const { customer_name, customer_title, total_amount, currency, notes, items, company_id } = req.body;
+      let { customer_name, customer_title, total_amount, currency, notes, items, company_id } = req.body;
       
       await client.query("BEGIN");
+
+      // 1. Auto-create/link Company if changed
+      if (!company_id && customer_name) {
+        const existingComp = await client.query(
+          "SELECT id FROM companies WHERE store_id = $1 AND LOWER(TRIM(title)) = LOWER($2)",
+          [storeId, customer_name.trim()]
+        );
+        if (existingComp.rows.length > 0) {
+          company_id = existingComp.rows[0].id;
+        } else {
+          const newComp = await client.query(
+            "INSERT INTO companies (store_id, title) VALUES ($1, $2) RETURNING id",
+            [storeId, customer_name.trim()]
+          );
+          company_id = newComp.rows[0].id;
+        }
+      }
       
       const quotRes = await client.query(
         "UPDATE quotations SET customer_name = $1, customer_title = $2, total_amount = $3, currency = $4, notes = $5, company_id = $6 WHERE id = $7 AND store_id = $8 RETURNING id",
@@ -1242,9 +1317,23 @@ async function startServer() {
       await client.query("DELETE FROM quotation_items WHERE quotation_id = $1", [id]);
       
       for (const item of items) {
+        // 2. Auto-create Product if barcode provided and not exists
+        if (item.barcode) {
+          const existingProd = await client.query(
+            "SELECT id FROM products WHERE store_id = $1 AND barcode = $2",
+            [storeId, item.barcode]
+          );
+          if (existingProd.rows.length === 0) {
+            await client.query(
+              "INSERT INTO products (store_id, barcode, name, price, currency, stock_quantity) VALUES ($1, $2, $3, $4, $5, 0)",
+              [storeId, item.barcode, item.product_name, item.unit_price, currency]
+            );
+          }
+        }
+
         await client.query(
-          "INSERT INTO quotation_items (quotation_id, product_id, product_name, barcode, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-          [id, item.product_id || null, item.product_name, item.barcode || null, item.quantity, item.unit_price, item.total_price]
+          "INSERT INTO quotation_items (quotation_id, product_id, product_name, barcode, quantity, unit, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+          [id, item.product_id || null, item.product_name, item.barcode || null, item.quantity, item.unit || 'Adet', item.unit_price, item.total_price]
         );
       }
       
@@ -1258,12 +1347,117 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/store/quotations/:id", authenticate, async (req: any, res) => {
+  app.post("/api/store/quotations/:id/convert-to-sale", authenticate, async (req: any, res) => {
+    const { paymentMethod, dueDate } = req.body;
+    const storeId = getStoreId(req);
+    if (!storeId) return res.status(400).json({ error: "Store ID required" });
+    const client = await pool.connect();
     try {
-      const storeId = req.user.role === "superadmin" ? (req.query.storeId || req.user.store_id) : req.user.store_id;
-      const { id } = req.params;
-      await pool.query("DELETE FROM quotations WHERE id = $1 AND store_id = $2", [id, storeId]);
-      res.json({ success: true });
+      await client.query("BEGIN");
+
+      // 1. Get Quotation
+      const qRes = await client.query(
+        "SELECT * FROM quotations WHERE id = $1 AND store_id = $2 FOR UPDATE",
+        [req.params.id, storeId]
+      );
+      if (qRes.rows.length === 0) throw new Error("Quotation not found");
+      const q = qRes.rows[0];
+      if (q.status === 'approved') throw new Error("Quotation already converted");
+
+      // 2. Create Sale
+      const sRes = await client.query(
+        "INSERT INTO sales (store_id, total_amount, currency, status, customer_name, payment_method, quotation_id, due_date) VALUES ($1, $2, $3, 'completed', $4, $5, $6, $7) RETURNING id",
+        [storeId, q.total_amount, q.currency, q.customer_name, paymentMethod, q.id, dueDate || null]
+      );
+      const saleId = sRes.rows[0].id;
+
+      // 3. Move Items & Update Stock
+      const itemsRes = await client.query("SELECT * FROM quotation_items WHERE quotation_id = $1", [q.id]);
+      for (const item of itemsRes.rows) {
+        await client.query(
+          "INSERT INTO sale_items (sale_id, product_id, product_name, barcode, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+          [saleId, item.product_id, item.product_name, item.barcode, item.quantity, item.unit_price, item.total_price]
+        );
+        if (item.product_id) {
+          await client.query(
+            "UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2",
+            [item.quantity, item.product_id]
+          );
+        }
+      }
+
+      // 4. Handle Transactions (Current Account)
+      if (q.company_id) {
+        // Always record the debt for the company
+        await client.query(
+          "INSERT INTO current_account_transactions (store_id, company_id, quotation_id, type, amount, description, due_date) VALUES ($1, $2, $3, 'debt', $4, $5, $6)",
+          [storeId, q.company_id, q.id, q.total_amount, `Tekliften Satışa Dönüştü #${q.id}`, dueDate || null]
+        );
+
+        // If paid now (Cash/Card/Bank), record the credit to zero out the balance for THIS transaction
+        if (paymentMethod !== 'cari') {
+          await client.query(
+            "INSERT INTO current_account_transactions (store_id, company_id, type, amount, description) VALUES ($1, $2, 'credit', $3, $4)",
+            [storeId, q.company_id, q.total_amount, `Ödeme Alındı (${paymentMethod}) - Teklif #${q.id}`]
+          );
+        }
+      }
+
+      // 5. Update Quotation Status
+      await client.query("UPDATE quotations SET status = 'approved' WHERE id = $1", [q.id]);
+
+      await client.query("COMMIT");
+      res.json({ success: true, saleId });
+    } catch (e: any) {
+      await client.query("ROLLBACK");
+      res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  // --- Sales Routes ---
+  app.get("/api/store/sales", authenticate, async (req: any, res) => {
+    try {
+      const storeId = getStoreId(req);
+      if (!storeId) return res.status(400).json({ error: "Store ID required" });
+
+      const { search, status, startDate, endDate } = req.query;
+      let query = "SELECT * FROM sales WHERE store_id = $1";
+      let params: any[] = [storeId];
+
+      if (search) {
+        query += ` AND (customer_name ILIKE $${params.length + 1})`;
+        params.push(`%${search}%`);
+      }
+
+      if (status && status !== 'all') {
+        query += ` AND status = $${params.length + 1}`;
+        params.push(status);
+      }
+
+      if (startDate) {
+        query += ` AND created_at >= $${params.length + 1}`;
+        params.push(startDate);
+      }
+
+      if (endDate) {
+        query += ` AND created_at <= $${params.length + 1}`;
+        params.push(endDate);
+      }
+
+      query += " ORDER BY created_at DESC";
+      const result = await pool.query(query, params);
+
+      const salesWithItems = await Promise.all(result.rows.map(async (s: any) => {
+        const itemsResult = await pool.query(
+          "SELECT * FROM sale_items WHERE sale_id = $1 ORDER BY id ASC",
+          [s.id]
+        );
+        return { ...s, items: itemsResult.rows };
+      }));
+
+      res.json(salesWithItems);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -1273,7 +1467,8 @@ async function startServer() {
 
   app.get("/api/store/companies", authenticate, async (req: any, res) => {
     try {
-      const storeId = req.user.role === "superadmin" ? (req.query.storeId || req.user.store_id) : req.user.store_id;
+      const storeId = getStoreId(req);
+      if (!storeId) return res.status(400).json({ error: "Store ID required" });
       const result = await pool.query(
         `SELECT 
           c.*,
@@ -1294,7 +1489,7 @@ async function startServer() {
   app.post("/api/store/companies", authenticate, async (req: any, res) => {
     const { tax_office, tax_number, address, phone, email, contact_person } = req.body;
     const title = String(req.body.title || "").trim();
-    const storeId = req.user.role === "superadmin" ? (req.body.storeId || req.user.store_id) : req.user.store_id;
+    const storeId = getStoreId(req);
     try {
       // Check for unique title per store
       const existing = await pool.query("SELECT * FROM companies WHERE store_id = $1 AND LOWER(TRIM(title)) = LOWER($2)", [storeId, title]);
@@ -1571,51 +1766,15 @@ async function startServer() {
     });
   });
 
-  // Store: Manage Sales (POS)
-  app.get("/api/store/sales", authenticate, async (req: any, res) => {
-    const storeId = req.user.role === "superadmin" ? req.query.storeId : req.user.store_id;
-    const status = req.query.status;
-    const startDate = req.query.startDate;
-    const endDate = req.query.endDate;
-
-    let query = "SELECT * FROM sales WHERE store_id = $1";
-    const params: any[] = [storeId];
-
-    if (status) {
-      params.push(status);
-      query += ` AND status = $${params.length}`;
-    }
-    if (startDate) {
-      params.push(startDate);
-      query += ` AND created_at >= $${params.length}`;
-    }
-    if (endDate) {
-      params.push(endDate + ' 23:59:59');
-      query += ` AND created_at <= $${params.length}`;
-    }
-
-    query += " ORDER BY created_at DESC";
-
-    try {
-      const sales = await pool.query(query, params);
-      
-      const salesWithDetails = [];
-      for (const sale of sales.rows) {
-        const items = await pool.query("SELECT * FROM sale_items WHERE sale_id = $1", [sale.id]);
-        const payments = await pool.query("SELECT * FROM sale_payments WHERE sale_id = $1", [sale.id]);
-        salesWithDetails.push({ ...sale, items: items.rows, payments: payments.rows });
-      }
-      
-      res.json(salesWithDetails);
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
-    }
-  });
 
   app.post("/api/store/sales/:id/complete", authenticate, async (req: any, res) => {
     const { id } = req.params;
     const { paymentMethod, payments, companyId } = req.body; 
-    const storeId = req.user.store_id;
+    const storeId = req.user.role === "superadmin" ? (req.body.storeId || req.user.store_id) : (req.user.store_id || req.body.storeId);
+    if (!storeId) {
+      console.error(`[API ERROR] /api/store/sales/${id}/complete: Store ID missing.`);
+      return res.status(400).json({ error: "Store ID required" });
+    }
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
