@@ -226,9 +226,7 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     const data = Object.fromEntries(formData.entries());
-    // Items logic would go here, simplified for extraction
     try {
-      // API call
       setShowQuotationModal(false);
       setEditingQuotation(null);
       fetchData();
@@ -298,6 +296,17 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
       } catch (error) {
         alert("Hata oluştu");
       }
+    }
+  };
+
+  const handleUpgradePlan = async (planName: string) => {
+    try {
+      const res = await api.initializePayment(planName);
+      if (res.paymentUrl) {
+        window.location.href = res.paymentUrl;
+      }
+    } catch (error: any) {
+      alert(error.message || "Ödeme başlatılamadı");
     }
   };
 
@@ -479,14 +488,12 @@ export default function StoreDashboard({ user, onLogout }: StoreDashboardProps) 
                 onDeleteUser={handleDeleteUser}
                 users={users}
                 currentUser={user}
+                onUpgradePlan={handleUpgradePlan}
               />
             )}
           </div>
         </div>
       </main>
-
-      {/* Modals would go here - for brevity I'll keep them simplified or extract later if needed */}
-      {/* Product Modal, Import Modal, etc. */}
     </div>
   );
 }

@@ -26,6 +26,7 @@ interface SettingsTabProps {
   onDeleteUser: (id: number) => void;
   users: any[];
   currentUser: any;
+  onUpgradePlan: (plan: string) => void;
 }
 
 const SettingsTab = ({ 
@@ -37,13 +38,99 @@ const SettingsTab = ({
   onAddUser,
   onDeleteUser,
   users,
-  currentUser
-}: SettingsTabProps) => {
+  currentUser,
+  onUpgradePlan
+}: SettingsTabProps & { onUpgradePlan: (plan: string) => void }) => {
   const { lang } = useLanguage();
   const t = translations[lang].dashboard;
 
+  const plans = [
+    { 
+      id: 'basic', 
+      name: lang === 'tr' ? 'Temel Paket' : 'Basic Plan', 
+      price: '0', 
+      features: lang === 'tr' ? ['50 Ürün Limiti', 'Temel Analizler'] : ['50 Product Limit', 'Basic Analytics'],
+      color: 'bg-gray-50 text-gray-600'
+    },
+    { 
+      id: 'pro', 
+      name: lang === 'tr' ? 'Pro Paket' : 'Pro Plan', 
+      price: '199', 
+      features: lang === 'tr' ? ['500 Ürün Limiti', 'Gelişmiş Analizler', 'Öncelikli Destek'] : ['500 Product Limit', 'Advanced Analytics', 'Priority Support'],
+      color: 'bg-indigo-50 text-indigo-600'
+    },
+    { 
+      id: 'enterprise', 
+      name: lang === 'tr' ? 'Kurumsal' : 'Enterprise', 
+      price: '499', 
+      features: lang === 'tr' ? ['Sınırsız Ürün', 'Tüm Özellikler', '7/24 Destek'] : ['Unlimited Products', 'All Features', '24/7 Support'],
+      color: 'bg-purple-50 text-purple-600'
+    }
+  ];
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
+      {/* Subscription Section */}
+      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-6">
+          <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+            branding.plan === 'pro' ? 'bg-indigo-100 text-indigo-600' : 
+            branding.plan === 'enterprise' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-400'
+          }`}>
+            {lang === 'tr' ? 'Mevcut Plan:' : 'Current Plan:'} {branding.plan?.toUpperCase() || 'FREE'}
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-3 mb-8">
+          <div className="p-2 bg-amber-50 rounded-xl text-amber-600">
+            <CreditCard className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">{lang === 'tr' ? 'Abonelik ve Paketler' : 'Subscription & Plans'}</h3>
+            {branding.subscription_end && (
+              <p className="text-xs text-gray-400 font-medium mt-1">
+                {lang === 'tr' ? 'Yenileme Tarihi:' : 'Renewal Date:'} {new Date(branding.subscription_end).toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US')}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {plans.map((plan) => (
+            <div key={plan.id} className={`p-6 rounded-2xl border ${branding.plan === plan.id ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-100'} flex flex-col`}>
+              <div className={`inline-block px-3 py-1 rounded-lg text-[10px] font-bold uppercase mb-4 ${plan.color}`}>
+                {plan.name}
+              </div>
+              <div className="flex items-baseline mb-6">
+                <span className="text-3xl font-black text-gray-900">{plan.price}</span>
+                <span className="text-sm text-gray-400 ml-1 font-bold">₺/yıl</span>
+              </div>
+              <ul className="space-y-3 mb-8 flex-1">
+                {plan.features.map((feature, idx) => (
+                  <li key={idx} className="flex items-center text-sm text-gray-500">
+                    <div className="h-1.5 w-1.5 bg-indigo-500 rounded-full mr-2 shrink-0" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              {branding.plan !== plan.id && plan.id !== 'basic' && (
+                <button 
+                  onClick={() => onUpgradePlan(plan.id)}
+                  className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition-all shadow-lg shadow-gray-100"
+                >
+                  {lang === 'tr' ? 'Yükselt' : 'Upgrade'}
+                </button>
+              )}
+              {branding.plan === plan.id && (
+                <div className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-sm text-center">
+                  {lang === 'tr' ? 'Aktif Paket' : 'Active Plan'}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">

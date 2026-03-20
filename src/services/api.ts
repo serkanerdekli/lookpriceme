@@ -84,4 +84,7 @@ export const api = {
   resetPassword: (token: string, password: any) => api.post(`/api/auth/reset-password`, { token, newPassword: password }),
   
   getProductBySlug: (slug: string, barcode: string) => api.get(`/api/public/scan/${slug}/${barcode}`),
+  
+  // Payment
+  initializePayment: (planName: string) => api.post("/api/payment/checkout-form/initialize", { planName }),
 };

@@ -12,6 +12,14 @@ import fs from "fs";
 import dotenv from "dotenv";
 
 dotenv.config();
+import Iyzipay from 'iyzipay';
+
+const iyzipay = new Iyzipay({
+    apiKey: process.env.IYZIPAY_API_KEY || 'sandbox-your-api-key',
+    secretKey: process.env.IYZIPAY_SECRET_KEY || 'sandbox-your-secret-key',
+    uri: 'https://sandbox-api.iyzipay.com'
+});
+
 
 console.log("Starting server process...");
 console.log("Node Version:", process.version);
@@ -226,6 +234,17 @@ async function initDb() {
         amount DECIMAL(12,2) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS subscription_payments (
+        id SERIAL PRIMARY KEY,
+        store_id INTEGER NOT NULL,
+        plan_name TEXT NOT NULL,
+        amount DECIMAL(12,2) NOT NULL,
+        iyzico_token TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
       );
 
       -- Update quotations table if needed
@@ -1410,6 +1429,139 @@ async function startServer() {
     } catch (err) {
       res.status(500).json({ error: "Database error" });
     }
+  });
+
+  // --- IYZICO SUBSCRIPTION ROUTES ---
+
+  app.post("/api/payment/checkout-form/initialize", authenticate, async (req: any, res) => {
+    const { planName } = req.body;
+    const storeId = req.user.store_id;
+
+    if (!['pro', 'enterprise'].includes(planName)) {
+      return res.status(400).json({ error: "Geçersiz plan seçimi" });
+    }
+
+    const prices: Record<string, number> = {
+      'pro': 199.00,
+      'enterprise': 499.00
+    };
+    const amount = prices[planName];
+
+    try {
+      const storeRes = await pool.query("SELECT * FROM stores WHERE id = $1", [storeId]);
+      const store = storeRes.rows[0];
+      const userRes = await pool.query("SELECT * FROM users WHERE id = $1", [req.user.id]);
+      const user = userRes.rows[0];
+
+      const basketId = `SUB_${Date.now()}`;
+      const callbackBase = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3000}`;
+
+      const request = {
+        locale: Iyzipay.LOCALE.TR,
+        conversationId: basketId,
+        price: amount.toString(),
+        paidPrice: amount.toString(),
+        currency: Iyzipay.CURRENCY.TRY,
+        basketId: basketId,
+        paymentGroup: Iyzipay.PAYMENT_GROUP.LISTING,
+        callbackUrl: `${callbackBase}/api/payment/callback`,
+        enabledInstallments: [1, 2, 3, 6, 9],
+        buyer: {
+          id: user.id.toString(),
+          name: store.contact_person?.split(' ')[0] || 'Mağaza',
+          surname: store.contact_person?.split(' ')[1] || 'Sahibi',
+          gsmNumber: store.phone || '+905000000000',
+          email: user.email,
+          identityNumber: '11111111111',
+          lastLoginDate: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          registrationDate: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          registrationAddress: store.address || 'Türkiye',
+          ip: req.ip,
+          city: 'Istanbul',
+          country: 'Turkey',
+          zipCode: '34000'
+        },
+        shippingAddress: {
+          contactName: store.contact_person || 'Mağaza Sahibi',
+          city: 'Istanbul',
+          country: 'Turkey',
+          address: store.address || 'Türkiye',
+          zipCode: '34000'
+        },
+        billingAddress: {
+          contactName: store.contact_person || 'Mağaza Sahibi',
+          city: 'Istanbul',
+          country: 'Turkey',
+          address: store.address || 'Türkiye',
+          zipCode: '34000'
+        },
+        basketItems: [
+          {
+            id: planName,
+            name: `${planName.toUpperCase()} Abonelik Paketi (1 Yıllık)`,
+            category1: 'Abonelik',
+            itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL,
+            price: amount.toString()
+          }
+        ]
+      };
+
+      iyzipay.checkoutFormInitialize.create(request, async (err, result) => {
+        if (err || result.status !== 'success') {
+          return res.status(400).json({ error: result?.errorMessage || "Iyzico form başlatılamadı" });
+        }
+
+        // Save payment attempt
+        await pool.query(
+          "INSERT INTO subscription_payments (store_id, plan_name, amount, iyzico_token, status) VALUES ($1, $2, $3, $4, 'pending')",
+          [storeId, planName, amount, result.token]
+        );
+
+        res.json({ paymentUrl: result.paymentPageUrl, token: result.token });
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/payment/callback", async (req: any, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).send("Token required");
+
+    iyzipay.checkoutForm.retrieve({ locale: Iyzipay.LOCALE.TR, token }, async (err, result) => {
+      if (err || result.status !== 'success' || result.paymentStatus !== 'SUCCESS') {
+        await pool.query("UPDATE subscription_payments SET status = 'failed' WHERE iyzico_token = $1", [token]);
+        return res.redirect('/dashboard/settings?payment=failed');
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        // 1. Get the payment info
+        const paymentRes = await client.query("SELECT * FROM subscription_payments WHERE iyzico_token = $1", [token]);
+        const payment = paymentRes.rows[0];
+
+        if (payment && payment.status === 'pending') {
+          // 2. Update payment status
+          await client.query("UPDATE subscription_payments SET status = 'success' WHERE id = $1", [payment.id]);
+
+          // 3. Update store plan and extend subscription date (+1 Year)
+          await client.query(
+            "UPDATE stores SET plan = $1, subscription_end = COALESCE(subscription_end, CURRENT_DATE) + INTERVAL '1 year' WHERE id = $2",
+            [payment.plan_name, payment.store_id]
+          );
+        }
+
+        await client.query("COMMIT");
+        res.redirect('/dashboard/settings?payment=success');
+      } catch (e) {
+        await client.query("ROLLBACK");
+        res.redirect('/dashboard/settings?payment=error');
+      } finally {
+        client.release();
+      }
+    });
   });
 
   // Store: Manage Sales (POS)
